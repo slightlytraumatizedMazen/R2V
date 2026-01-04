@@ -264,7 +264,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        title: const Text("Marketplace", style: TextStyle(fontWeight: FontWeight.w600)),
+        title: const Text("Marketplace", style: TextStyle(fontWeight: FontWeight.w600,color: Colors.white)),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),

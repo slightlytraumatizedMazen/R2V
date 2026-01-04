@@ -1,11 +1,16 @@
+// home_screen.dart
+// ✅ Removed: Recent projects section
+// ✅ Fixed: Stats labels (Models / Downloads) stay on ONE line
+// ✅ Fixed: Mobile tabs stay pinned at top for ALL tabs (Home/AI/Scan/Market)
+
 import 'dart:async';
 import 'dart:math';
 import 'dart:ui';
 
-import 'package:flutter/scheduler.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:model_viewer_plus/model_viewer_plus.dart';
 
 void main() {
@@ -22,6 +27,7 @@ class MyApp extends StatelessWidget {
       scrollBehavior: const AppScrollBehavior(),
       routes: {
         '/': (_) => const HomeScreen(username: 'user'),
+        '/home': (_) => const HomeScreen(username: 'user'),
         '/aichat': (_) => const Scaffold(body: Center(child: Text('AI Chat'))),
         '/explore': (_) => const Scaffold(body: Center(child: Text('Explore'))),
         '/settings': (_) => const Scaffold(body: Center(child: Text('Settings'))),
@@ -47,7 +53,7 @@ class AppScrollBehavior extends MaterialScrollBehavior {
 }
 
 /// =========================
-/// ✅ Marketplace model data (for Trending popup)
+/// ✅ Marketplace-like model data (for popup)
 /// =========================
 class MarketModel {
   final String name;
@@ -81,31 +87,66 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  // Mobile tabs: 0 Home, 1 AI, 2 Scan, 3 Market
   int _selectedTab = 0;
+
+  // Web nav: 0 Home, 1 AI, 2 Market, 3 Settings
   int _webActiveNavIndex = 0;
   int? _webHoverNavIndex;
 
   late final ScrollController _scrollController;
   bool _collapsed = false;
-  bool _isLoading = true;
 
-  // ===== Use Cases =====
+  // ===== Use cases carousel selection =====
   int _selectedUseCase = 0;
-
-  // ✅ Use ListView controller (no centering)
   late final ScrollController _useCaseScrollController;
-
   Timer? _useCaseAutoTimer;
   bool _pauseUseCaseAutoScroll = false;
   bool _isUserDraggingUseCases = false;
 
-  Timer? _resumeAutoAfterTap;
-
   bool _lastIsWeb = false;
 
-  /// ✅ NEW: popup selected model
+  /// ✅ popup selected model
   MarketModel? _activeMarketModel;
 
+  // ------------------------------------------------------------------
+  // ✅ DATA: Continue / Stats
+  // ------------------------------------------------------------------
+  // (1) Continue section (last items)
+  final Map<String, dynamic> _continueAI = const {
+    "title": "Neon sci-fi car in rainy alley",
+    "subtitle": "Last prompt • 2 hours ago",
+    "route": "/aichat",
+    "accent": Color(0xFF8A4FFF),
+    "icon": Icons.bolt_rounded,
+  };
+
+  final Map<String, dynamic> _continueScan = const {
+    "title": "Vintage Chair Scan",
+    "subtitle": "Draft scan • 10 minutes ago",
+    "route": "/photo_scan",
+    "accent": Color(0xFFF72585),
+    "icon": Icons.photo_camera_rounded,
+  };
+
+  final Map<String, dynamic> _continueMarket = const {
+    "title": "Porsche 911 Asset",
+    "subtitle": "Last viewed • yesterday",
+    "route": "/explore",
+    "accent": Color(0xFF4895EF),
+    "icon": Icons.storefront_rounded,
+  };
+
+  // (7) Stats mini cards
+  final Map<String, int> _stats = const {
+    "Models": 12,
+    "Scans": 5,
+    "Downloads": 9,
+  };
+
+  // ------------------------------------------------------------------
+  // Use cases + details
+  // ------------------------------------------------------------------
   final List<Map<String, String>> _useCases = const [
     {"id": "film", "title": "Film Production", "asset": "assets/usecases/film.png"},
     {"id": "product", "title": "Product Design", "asset": "assets/usecases/product.png"},
@@ -189,21 +230,15 @@ class _HomeScreenState extends State<HomeScreen> {
     },
   ];
 
-  final List<Map<String, String>> _scanHistory = const [
-    {"title": "Sneaker Prototype", "status": "Completed", "time": "2h ago"},
-    {"title": "Vintage Chair", "status": "Processing", "time": "10m ago"},
-    {"title": "Ceramic Vase", "status": "Failed", "time": "Yesterday"},
-  ];
-
-  /// ✅ UPDATED: trending models include GLB/poster paths
-  final List<MarketModel> _trending = const [
+  /// ✅ A single demo model (used if you open popup)
+  final List<MarketModel> _models = const [
     MarketModel(
       name: "Porsche 911",
       author: "McLaughlin Rh",
       description: "911 sports car, clean geometry, studio lighting.",
       tags: ["car", "game-ready", "complex", "edges", "symmetric"],
       likes: "1.2k",
-      tagLabel: "Trending",
+      tagLabel: "Saved",
       glbAssetPath: "assets/models/911.glb",
       posterAssetPath: "assets/posters/911.png",
     ),
@@ -217,13 +252,10 @@ class _HomeScreenState extends State<HomeScreen> {
     _useCaseScrollController = ScrollController();
 
     _startUseCaseAutoSwitch();
-
-    Future.delayed(const Duration(seconds: 2), () {
-      if (mounted) setState(() => _isLoading = false);
-    });
   }
 
   void _onScroll() {
+    if (!_scrollController.hasClients) return;
     final dir = _scrollController.position.userScrollDirection;
     if (dir == ScrollDirection.reverse && !_collapsed) {
       setState(() => _collapsed = true);
@@ -232,16 +264,13 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // ✅ Auto-switch ONLY selection/details (row does NOT "center" or jump)
   void _startUseCaseAutoSwitch() {
     _useCaseAutoTimer?.cancel();
-
     _useCaseAutoTimer = Timer.periodic(const Duration(seconds: 4), (_) {
       if (!mounted) return;
       if (_pauseUseCaseAutoScroll) return;
       if (_isUserDraggingUseCases) return;
 
-      // Only auto-switch on "Home"
       if (_lastIsWeb) {
         if (_webActiveNavIndex != 0) return;
       } else {
@@ -252,28 +281,18 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  void _stopUseCaseAutoScroll() {
-    _useCaseAutoTimer?.cancel();
-    _useCaseAutoTimer = null;
-  }
-
-  void _pauseAfterTap() {
-    setState(() => _pauseUseCaseAutoScroll = true);
-    _resumeAutoAfterTap?.cancel();
-    _resumeAutoAfterTap = Timer(const Duration(seconds: 6), () {
-      if (mounted) setState(() => _pauseUseCaseAutoScroll = false);
-    });
-  }
-
   void _onUseCaseTap(int idx) {
     setState(() => _selectedUseCase = idx);
-    _pauseAfterTap();
+    setState(() => _pauseUseCaseAutoScroll = true);
+    Future.delayed(const Duration(seconds: 6), () {
+      if (!mounted) return;
+      setState(() => _pauseUseCaseAutoScroll = false);
+    });
   }
 
   @override
   void dispose() {
-    _stopUseCaseAutoScroll();
-    _resumeAutoAfterTap?.cancel();
+    _useCaseAutoTimer?.cancel();
     _scrollController.dispose();
     _useCaseScrollController.dispose();
     super.dispose();
@@ -286,18 +305,11 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return Stack(
       children: [
-        // ✅ Particle mesh background (like meshy.ai)
         const Positioned.fill(child: MeshyParticleBackground()),
-
-        // ✅ Your app UI above it
-        Positioned.fill(
-          child: isWeb ? _buildWebHome(context) : _buildMobileHome(context),
-        ),
-
-        // ✅ NEW: Trending popup overlay
+        Positioned.fill(child: isWeb ? _buildWebHome(context) : _buildMobileHome(context)),
         if (_activeMarketModel != null)
           Positioned.fill(
-            child: _MarketModelPopup(
+            child: _HomeMarketModelPanel(
               model: _activeMarketModel!,
               onClose: () => setState(() => _activeMarketModel = null),
             ),
@@ -325,13 +337,32 @@ class _HomeScreenState extends State<HomeScreen> {
               const SizedBox(height: 16),
               Expanded(
                 child: SingleChildScrollView(
+                  controller: _scrollController,
                   padding: const EdgeInsets.fromLTRB(16, 24, 16, 32),
                   physics: const BouncingScrollPhysics(),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       _buildWebHeroSection(context),
-                      const SizedBox(height: 34),
+                      const SizedBox(height: 18),
+
+                      // ✅ (7) Stats
+                      const _SectionHeader(title: "Your stats", subtitle: "Quick overview"),
+                      const SizedBox(height: 12),
+                      _StatsRow(stats: _stats),
+                      const SizedBox(height: 22),
+
+                      // ✅ (1) Continue
+                      const _SectionHeader(title: "Continue", subtitle: "Jump back in"),
+                      const SizedBox(height: 12),
+                      _ContinueRow(
+                        items: [_continueAI, _continueScan, _continueMarket],
+                        onTap: (item) => Navigator.pushNamed(context, item["route"] as String),
+                      ),
+                      const SizedBox(height: 28),
+
+                      const _SectionHeader(title: "Use cases", subtitle: "Pick a category"),
+                      const SizedBox(height: 12),
 
                       MouseRegion(
                         onEnter: (_) => setState(() => _pauseUseCaseAutoScroll = true),
@@ -353,31 +384,76 @@ class _HomeScreenState extends State<HomeScreen> {
 
                       const SizedBox(height: 18),
 
-                      // ✅ Details: slide from LEFT → RIGHT (swipe right feel)
                       AnimatedSwitcher(
                         duration: const Duration(milliseconds: 320),
                         switchInCurve: Curves.easeOut,
                         switchOutCurve: Curves.easeIn,
                         transitionBuilder: (child, anim) {
                           return SlideTransition(
-                            position: Tween<Offset>(
-                              begin: const Offset(-0.06, 0),
-                              end: Offset.zero,
-                            ).animate(anim),
+                            position: Tween<Offset>(begin: const Offset(-0.06, 0), end: Offset.zero).animate(anim),
                             child: FadeTransition(opacity: anim, child: child),
                           );
                         },
                         child: UseCaseDetailsSection(
                           key: ValueKey(_useCaseDetails[_selectedUseCase]["id"]),
                           data: _useCaseDetails[_selectedUseCase],
-                          onCta: () => Navigator.pushNamed(context, _useCaseDetails[_selectedUseCase]["ctaRoute"]),
+                          onCta: () => Navigator.pushNamed(
+                            context,
+                            _useCaseDetails[_selectedUseCase]["ctaRoute"],
+                          ),
                         ),
                       ),
 
-                      const SizedBox(height: 30),
-                      _buildWebFeatureRow(),
-                      const SizedBox(height: 32),
-                      _buildWebTrendingSection(),
+                      const SizedBox(height: 26),
+
+                      // ✅ Quick actions
+                      const _SectionHeader(title: "Quick actions", subtitle: "Start instantly"),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _HomeActionCard(
+                              title: "AI Studio",
+                              subtitle: "Text → 3D concepts & variations",
+                              icon: Icons.bolt_rounded,
+                              accent: const Color(0xFF8A4FFF),
+                              onTap: () => Navigator.pushNamed(context, '/aichat'),
+                              primaryLabel: "Open",
+                              secondaryLabel: "Templates",
+                              onSecondaryTap: () => _toast(context, "Templates coming soon"),
+                              bullets: const ["Prompt", "Variants", "Export"],
+                            ),
+                          ),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: _HomeActionCard(
+                              title: "Scan",
+                              subtitle: "Photo → 3D model (photogrammetry)",
+                              icon: Icons.photo_camera_rounded,
+                              accent: const Color(0xFFF72585),
+                              onTap: () => Navigator.pushNamed(context, '/photo_scan'),
+                              primaryLabel: "Start scan",
+                              secondaryLabel: "Tips",
+                              onSecondaryTap: () => _openTips(context),
+                              bullets: const ["Capture", "Rebuild", "STL/GLB"],
+                            ),
+                          ),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: _HomeActionCard(
+                              title: "Marketplace",
+                              subtitle: "Browse assets & packs",
+                              icon: Icons.storefront_rounded,
+                              accent: const Color(0xFF4895EF),
+                              onTap: () => Navigator.pushNamed(context, '/explore'),
+                              primaryLabel: "Browse",
+                              secondaryLabel: "Saved",
+                              onSecondaryTap: () => setState(() => _activeMarketModel = _models.first),
+                              bullets: const ["Preview", "Free/Paid", "Creators"],
+                            ),
+                          ),
+                        ],
+                      ),
                     ],
                   ),
                 ),
@@ -459,6 +535,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         setState(() => _webActiveNavIndex = index);
                         switch (index) {
                           case 0:
+                            Navigator.pushNamed(context, '/home');
                             break;
                           case 1:
                             Navigator.pushNamed(context, '/aichat');
@@ -550,12 +627,24 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     const SizedBox(width: 14),
                     ElevatedButton.icon(
+                      onPressed: () => Navigator.pushNamed(context, '/photo_scan'),
+                      icon: const Icon(Icons.photo_camera_rounded),
+                      label: const Text("Start Scan"),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFF72585),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 14),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    OutlinedButton.icon(
                       onPressed: () => Navigator.pushNamed(context, '/explore'),
                       icon: const Icon(Icons.storefront_rounded),
                       label: const Text("Marketplace"),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF4895EF),
+                      style: OutlinedButton.styleFrom(
                         foregroundColor: Colors.white,
+                        side: BorderSide(color: Colors.white.withOpacity(0.18)),
                         padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 14),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
                       ),
@@ -593,140 +682,57 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildWebFeatureRow() {
-    return Row(
-      children: const [
-        Expanded(
-          child: _FeatureCard(
-            icon: Icons.auto_awesome_rounded,
-            title: "AI Text → 3D",
-            subtitle: "Generate 3D assets using simple prompts.",
-            badge: "AI Studio",
-            gradient: [Color(0xFF8A4FFF), Color(0xFFBC70FF)],
-          ),
-        ),
-        SizedBox(width: 18),
-        Expanded(
-          child: _FeatureCard(
-            icon: Icons.storefront_rounded,
-            title: "Marketplace",
-            subtitle: "Explore ready-made 3D assets.",
-            badge: "Market",
-            gradient: [Color(0xFF4895EF), Color(0xFF4CC9F0)],
-          ),
-        ),
-        SizedBox(width: 18),
-        Expanded(
-          child: _FeatureCard(
-            icon: Icons.photo_camera_rounded,
-            title: "Scan Objects",
-            subtitle: "Create 3D models using photogrammetry.",
-            badge: "Scan",
-            gradient: [Color(0xFFF72585), Color(0xFFBC70FF)],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildWebTrendingSection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          "Trending in Marketplace",
-          style: TextStyle(color: Colors.white, fontSize: 19, fontWeight: FontWeight.w600),
-        ),
-        const SizedBox(height: 14),
-
-        /// ✅ UPDATED: Trending cards open popup
-        Wrap(
-          spacing: 14,
-          runSpacing: 12,
-          children: _trending
-              .map(
-                (m) => _TrendingCard(
-                  name: m.name,
-                  likes: m.likes,
-                  tag: m.tagLabel,
-                  onTap: () => setState(() => _activeMarketModel = m),
-                ),
-              )
-              .toList(),
-        ),
-      ],
-    );
-  }
-
   // =========================
-  // MOBILE
+  // MOBILE (tabs pinned at top)
   // =========================
   Widget _buildMobileHome(BuildContext context) {
     final double w = MediaQuery.of(context).size.width;
-    final double contentWidth = w > 480 ? 480.0 : w;
+    final double contentWidth = w > 520 ? 520.0 : w;
 
     return Scaffold(
       backgroundColor: Colors.transparent,
       extendBodyBehindAppBar: true,
       appBar: PreferredSize(
-        preferredSize: Size.fromHeight(_collapsed ? 50 : 70),
-        child: Container(
-          color: Colors.transparent,
+        preferredSize: Size.fromHeight(_collapsed ? 58 : 74),
+        child: Padding(
           padding: EdgeInsets.only(
-            top: MediaQuery.of(context).padding.top + (_collapsed ? 0 : 6),
+            top: MediaQuery.of(context).padding.top + 10,
             left: 14,
             right: 14,
-            bottom: 6,
           ),
-          child: Row(
-            children: [
-              Row(
-                children: [
-                  Icon(Icons.auto_awesome_rounded, color: const Color(0xFFBC70FF), size: _collapsed ? 20 : 24),
-                  const SizedBox(width: 6),
-                  Text(
-                    "R2V",
-                    style: TextStyle(color: Colors.white, fontSize: _collapsed ? 17 : 20, fontWeight: FontWeight.w700),
-                  ),
-                ],
-              ),
-              const Spacer(),
-              GestureDetector(
-                onTap: () => Navigator.pushNamed(context, '/profile'),
-                child: Container(
-                  width: _collapsed ? 32 : 38,
-                  height: _collapsed ? 32 : 38,
-                  decoration: BoxDecoration(color: Colors.white.withOpacity(0.15), shape: BoxShape.circle),
-                  child: const Icon(Icons.person, color: Colors.white, size: 20),
-                ),
-              ),
-            ],
-          ),
+          child: _buildMobileTopPill(context),
         ),
       ),
       body: Padding(
-        padding: EdgeInsets.fromLTRB(22, _collapsed ? 95 : 120, 22, 40),
+        padding: EdgeInsets.fromLTRB(16, (_collapsed ? 92 : 110), 16, 16),
         child: Center(
           child: ConstrainedBox(
             constraints: BoxConstraints(maxWidth: contentWidth),
-            child: SingleChildScrollView(
-              controller: _scrollController,
-              physics: const BouncingScrollPhysics(),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildMobileTabs(),
-                  const SizedBox(height: 20),
-                  if (_selectedTab == 0)
-                    _isLoading ? const _HomeSkeleton() : _buildHomeTabMobile(context)
-                  else if (_selectedTab == 1)
-                    _isLoading ? const _AiSkeleton() : _buildAiTab(context)
-                  else if (_selectedTab == 2)
-                    _isLoading ? const _PhotogrammetrySkeleton() : _buildPhotogrammetryTab(context)
-                  else
-                    _isLoading ? const _MarketplaceSkeleton() : _buildMarketplaceTab(context),
-                ],
-              ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // ✅ Tabs always visible (pinned)
+                _buildMobileTabs(),
+                const SizedBox(height: 14),
+
+                // ✅ Only the content scrolls
+                Expanded(
+                  child: SingleChildScrollView(
+                    controller: _scrollController,
+                    physics: const BouncingScrollPhysics(),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (_selectedTab == 0) _buildHomeTabMobile(context),
+                        if (_selectedTab == 1) _buildAiTabMobile(context),
+                        if (_selectedTab == 2) _buildScanTabMobile(context),
+                        if (_selectedTab == 3) _buildMarketTabMobile(context),
+                        const SizedBox(height: 24),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ),
@@ -734,8 +740,45 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Widget _buildMobileTopPill(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(999),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+        child: Container(
+          padding: EdgeInsets.symmetric(horizontal: 14, vertical: _collapsed ? 10 : 12),
+          decoration: BoxDecoration(
+            color: Colors.black.withOpacity(0.35),
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(color: Colors.white.withOpacity(0.12)),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.auto_awesome_rounded, color: const Color(0xFFBC70FF), size: _collapsed ? 20 : 24),
+              const SizedBox(width: 8),
+              Text(
+                "R2V Studio",
+                style: TextStyle(color: Colors.white, fontSize: _collapsed ? 16 : 18, fontWeight: FontWeight.w700),
+              ),
+              const Spacer(),
+              GestureDetector(
+                onTap: () => Navigator.pushNamed(context, '/profile'),
+                child: Container(
+                  width: _collapsed ? 34 : 38,
+                  height: _collapsed ? 34 : 38,
+                  decoration: BoxDecoration(color: Colors.white.withOpacity(0.18), shape: BoxShape.circle),
+                  child: const Icon(Icons.person, color: Colors.white, size: 20),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildMobileTabs() {
-    final labels = ["Home", "AI Studio", "Photogrammetry", "Market"];
+    final labels = ["Home", "AI", "Scan", "Market"];
 
     return Container(
       padding: const EdgeInsets.all(4),
@@ -783,37 +826,34 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  // -------------------------
+  // Mobile: Home tab content
+  // -------------------------
   Widget _buildHomeTabMobile(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Container(
-          padding: const EdgeInsets.all(22),
-          decoration: BoxDecoration(
-            color: Colors.black.withOpacity(0.22),
-            borderRadius: BorderRadius.circular(26),
-            border: Border.all(color: Colors.white.withOpacity(0.12)),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text("Welcome back, @${widget.username}", style: const TextStyle(color: Colors.white70, fontSize: 14)),
-              const SizedBox(height: 6),
-              const Text(
-                "All your tools in one place.",
-                style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w700),
-              ),
-              const SizedBox(height: 10),
-              const Text(
-                "Jump into AI Studio, start a new photogrammetry scan,\nor explore trending marketplace assets.",
-                style: TextStyle(color: Colors.white70, fontSize: 13.5, height: 1.4),
-              ),
-            ],
-          ),
-        ),
+        _buildMobileHeroStack(context),
+        const SizedBox(height: 16),
+
+        // ✅ (7) Stats
+        const _SectionHeader(title: "Your stats", subtitle: "Quick overview"),
+        const SizedBox(height: 12),
+        _StatsRow(stats: _stats),
         const SizedBox(height: 18),
+
+        // ✅ (1) Continue
+        const _SectionHeader(title: "Continue", subtitle: "Jump back in"),
+        const SizedBox(height: 12),
+        _ContinueRow(
+          items: [_continueAI, _continueScan, _continueMarket],
+          onTap: (item) => Navigator.pushNamed(context, item["route"] as String),
+          forceVerticalOnMobile: true,
+        ),
+        const SizedBox(height: 22),
+
         const _SectionHeader(title: "Use Cases", subtitle: "Pick a category"),
-        const SizedBox(height: 200),
+        const SizedBox(height: 12),
         NotificationListener<ScrollNotification>(
           onNotification: (n) {
             if (n is ScrollStartNotification) _isUserDraggingUseCases = true;
@@ -843,84 +883,232 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
         const SizedBox(height: 22),
-      ],
-    );
-  }
 
-  Widget _buildAiTab(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text("AI Studio", style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w700)),
+        // ✅ Quick actions
+        const _SectionHeader(title: "Quick actions", subtitle: "Start instantly"),
         const SizedBox(height: 12),
-        Text("Transform text prompts into detailed 3D concept art.",
-            style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 13.5)),
-        const SizedBox(height: 18),
-        ElevatedButton.icon(
-          onPressed: () => Navigator.pushNamed(context, '/aichat'),
-          icon: const Icon(Icons.bolt_rounded),
-          label: const Text("Open AI Studio"),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFF8A4FFF),
-            foregroundColor: Colors.white,
-            minimumSize: const Size(double.infinity, 52),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-          ),
-        ),
-      ],
-    );
-  }
 
-  Widget _buildPhotogrammetryTab(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        ElevatedButton.icon(
-          onPressed: () => Navigator.pushNamed(context, '/photo_scan'),
-          icon: const Icon(Icons.photo_camera_rounded),
-          label: const Text("Start New Scan"),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFFF72585),
-            foregroundColor: Colors.white,
-            minimumSize: const Size(double.infinity, 52),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-          ),
+        _HomeActionCard(
+          title: "AI Studio",
+          subtitle: "Text → 3D concepts & variations",
+          icon: Icons.bolt_rounded,
+          accent: const Color(0xFF8A4FFF),
+          onTap: () => Navigator.pushNamed(context, '/aichat'),
+          primaryLabel: "Open",
+          secondaryLabel: "Templates",
+          onSecondaryTap: () => _toast(context, "Templates coming soon"),
+          bullets: const ["Prompt", "Variants", "Export"],
         ),
         const SizedBox(height: 12),
-        Column(
-          children: _scanHistory
-              .map((scan) => Padding(
-                    padding: const EdgeInsets.only(bottom: 10),
-                    child: _ScanHistoryCard(title: scan["title"]!, status: scan["status"]!, time: scan["time"]!),
-                  ))
-              .toList(),
+        _HomeActionCard(
+          title: "Scan",
+          subtitle: "Photo → 3D model (photogrammetry)",
+          icon: Icons.photo_camera_rounded,
+          accent: const Color(0xFFF72585),
+          onTap: () => Navigator.pushNamed(context, '/photo_scan'),
+          primaryLabel: "Start scan",
+          secondaryLabel: "Tips",
+          onSecondaryTap: () => _openTips(context),
+          bullets: const ["Capture", "Rebuild", "STL/GLB"],
+        ),
+        const SizedBox(height: 12),
+        _HomeActionCard(
+          title: "Marketplace",
+          subtitle: "Browse assets & packs",
+          icon: Icons.storefront_rounded,
+          accent: const Color(0xFF4895EF),
+          onTap: () => Navigator.pushNamed(context, '/explore'),
+          primaryLabel: "Browse",
+          secondaryLabel: "Saved",
+          onSecondaryTap: () => setState(() => _activeMarketModel = _models.first),
+          bullets: const ["Preview", "Free/Paid", "Creators"],
         ),
       ],
     );
   }
 
-  Widget _buildMarketplaceTab(BuildContext context) {
+  Widget _buildMobileHeroStack(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        ElevatedButton.icon(
-          onPressed: () => Navigator.pushNamed(context, '/explore'),
-          icon: const Icon(Icons.storefront_rounded),
-          label: const Text("Open Marketplace"),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFF4895EF),
-            foregroundColor: Colors.white,
-            minimumSize: const Size(double.infinity, 52),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: Colors.black.withOpacity(0.18),
+            borderRadius: BorderRadius.circular(26),
+            border: Border.all(color: Colors.white.withOpacity(0.10)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                "Welcome back, @${widget.username}",
+                style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 14),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                "Turn your ideas\ninto 3D in seconds.",
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 26,
+                  height: 1.08,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                "Use AI prompts, scan objects, or browse ready-made 3D assets.",
+                style: TextStyle(color: Colors.white.withOpacity(0.82), fontSize: 13.5, height: 1.4),
+              ),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () => Navigator.pushNamed(context, '/aichat'),
+                      icon: const Icon(Icons.bolt_rounded, size: 18),
+                      label: const Text("AI Studio"),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF8A4FFF),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () => Navigator.pushNamed(context, '/photo_scan'),
+                      icon: const Icon(Icons.photo_camera_rounded, size: 18),
+                      label: const Text("Scan"),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFF72585),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () => Navigator.pushNamed(context, '/explore'),
+                  icon: const Icon(Icons.storefront_rounded, size: 18),
+                  label: const Text("Marketplace"),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.white,
+                    side: BorderSide(color: Colors.white.withOpacity(0.18)),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                  ),
+                ),
+              )
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(22),
+            gradient: LinearGradient(
+              colors: [
+                const Color(0xFF282A36).withOpacity(0.85),
+                const Color(0xFF161620).withOpacity(0.95),
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            border: Border.all(color: Colors.white.withOpacity(0.16)),
+          ),
+          child: const Text(
+            "“A neon-lit sci-fi car parked in a rainy alley, cinematic lighting.”\n\nPrompt → 3D preview in under 60s.",
+            style: TextStyle(color: Colors.white70, fontSize: 13),
           ),
         ),
       ],
+    );
+  }
+
+  // -------------------------
+  // Mobile: AI tab
+  // -------------------------
+  Widget _buildAiTabMobile(BuildContext context) {
+    return _HomeActionCard(
+      title: "AI Studio",
+      subtitle: "Text → 3D concepts & variations",
+      icon: Icons.bolt_rounded,
+      accent: const Color(0xFF8A4FFF),
+      onTap: () => Navigator.pushNamed(context, '/aichat'),
+      primaryLabel: "Open AI Studio",
+      secondaryLabel: "Templates",
+      onSecondaryTap: () => _toast(context, "Templates coming soon"),
+      bullets: const ["Prompt", "Variants", "Export"],
+    );
+  }
+
+  // -------------------------
+  // Mobile: Scan tab
+  // -------------------------
+  Widget _buildScanTabMobile(BuildContext context) {
+    return _HomeActionCard(
+      title: "Scan",
+      subtitle: "Photo → 3D model (photogrammetry)",
+      icon: Icons.photo_camera_rounded,
+      accent: const Color(0xFFF72585),
+      onTap: () => Navigator.pushNamed(context, '/photo_scan'),
+      primaryLabel: "Start Scan",
+      secondaryLabel: "Tips",
+      onSecondaryTap: () => _openTips(context),
+      bullets: const ["Capture", "Rebuild", "STL/GLB"],
+    );
+  }
+
+  // -------------------------
+  // Mobile: Market tab
+  // -------------------------
+  Widget _buildMarketTabMobile(BuildContext context) {
+    return _HomeActionCard(
+      title: "Marketplace",
+      subtitle: "Browse assets & packs",
+      icon: Icons.storefront_rounded,
+      accent: const Color(0xFF4895EF),
+      onTap: () => Navigator.pushNamed(context, '/explore'),
+      primaryLabel: "Open Marketplace",
+      secondaryLabel: "Saved",
+      onSecondaryTap: () => setState(() => _activeMarketModel = _models.first),
+      bullets: const ["Preview", "Free/Paid", "Creators"],
+    );
+  }
+
+  // -------------------------
+  // Helpers
+  // -------------------------
+  void _toast(BuildContext context, String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg), behavior: SnackBarBehavior.floating),
+    );
+  }
+
+  void _openTips(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (_) => const Padding(
+        padding: EdgeInsets.all(12),
+        child: _TipsSheet(),
+      ),
     );
   }
 }
 
 // =========================
-// ✅ Particle Mesh Background (meshy.ai vibe)
+// ✅ Particle Mesh Background
 // =========================
 class MeshyParticleBackground extends StatelessWidget {
   const MeshyParticleBackground({super.key});
@@ -958,16 +1146,13 @@ class _MeshyBgCoreState extends State<_MeshyBgCore> with SingleTickerProviderSta
       if (!mounted) return;
       if (_size == Size.zero) return;
 
-      // move particles
-      final dt = 1 / 60;
+      const dt = 1 / 60;
       for (final p in _ps) {
         p.pos = p.pos + p.vel * dt;
-        // bounce edges
         if (p.pos.dx < 0 || p.pos.dx > _size.width) p.vel = Offset(-p.vel.dx, p.vel.dy);
         if (p.pos.dy < 0 || p.pos.dy > _size.height) p.vel = Offset(p.vel.dx, -p.vel.dy);
         p.pos = Offset(p.pos.dx.clamp(0.0, _size.width), p.pos.dy.clamp(0.0, _size.height));
       }
-
       setState(() {});
     });
     _ticker.start();
@@ -982,16 +1167,15 @@ class _MeshyBgCoreState extends State<_MeshyBgCore> with SingleTickerProviderSta
   void _ensureParticles(Size s) {
     if (s == Size.zero) return;
 
-    // particle count depends on screen area (keep it smooth)
     final area = s.width * s.height;
-    int target = (area / 18000).round(); // tune density
+    int target = (area / 18000).round();
     target = target.clamp(35, 95);
 
     if (_ps.length == target) return;
 
     _ps = List.generate(target, (i) {
       final pos = Offset(_rng.nextDouble() * s.width, _rng.nextDouble() * s.height);
-      final speed = 8 + _rng.nextDouble() * 18; // slow vibe
+      final speed = 8 + _rng.nextDouble() * 18;
       final ang = _rng.nextDouble() * pi * 2;
       final vel = Offset(cos(ang), sin(ang)) * speed;
       final r = 1.2 + _rng.nextDouble() * 1.9;
@@ -1013,9 +1197,7 @@ class _MeshyBgCoreState extends State<_MeshyBgCore> with SingleTickerProviderSta
           _hasMouse = true;
           _mouse = e.localPosition;
         },
-        onExit: (_) {
-          _hasMouse = false;
-        },
+        onExit: (_) => _hasMouse = false,
         child: CustomPaint(
           painter: _MeshPainter(
             particles: _ps,
@@ -1055,24 +1237,17 @@ class _MeshPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size _) {
-    // Base gradient background (dark + subtle color)
     final rect = Offset.zero & size;
 
     final bg = Paint()
-      ..shader = LinearGradient(
+      ..shader = const LinearGradient(
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
-        colors: [
-          const Color(0xFF0F1118),
-          const Color(0xFF141625),
-          const Color(0xFF0B0D14),
-        ],
-        stops: const [0.0, 0.55, 1.0],
+        colors: [Color(0xFF0F1118), Color(0xFF141625), Color(0xFF0B0D14)],
+        stops: [0.0, 0.55, 1.0],
       ).createShader(rect);
-
     canvas.drawRect(rect, bg);
 
-    // Soft glowing blobs (very subtle)
     void glowBlob(Offset c, double r, Color col, double a) {
       final p = Paint()
         ..color = col.withOpacity(a)
@@ -1085,14 +1260,12 @@ class _MeshPainter extends CustomPainter {
 
     glowBlob(center + wobble, 280, const Color(0xFF8A4FFF), 0.18);
     glowBlob(
-      Offset(size.width * 0.25, size.height * 0.70) +
-          Offset(cos(time * 0.35) * 35, sin(time * 0.32) * 28),
+      Offset(size.width * 0.25, size.height * 0.70) + Offset(cos(time * 0.35) * 35, sin(time * 0.32) * 28),
       240,
       const Color(0xFF4895EF),
       0.14,
     );
 
-    // Parallax (mouse)
     Offset parallax = Offset.zero;
     if (hasMouse) {
       final dx = (mouse.dx / max(1.0, size.width) - 0.5) * 18;
@@ -1100,15 +1273,13 @@ class _MeshPainter extends CustomPainter {
       parallax = Offset(dx, dy);
     }
 
-    // Mesh connections
-    final connectDist = min(size.width, size.height) * 0.15; // approx radius
+    final connectDist = min(size.width, size.height) * 0.15;
     final connectDist2 = connectDist * connectDist;
 
     final linePaint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1;
 
-    // Draw lines
     for (int i = 0; i < particles.length; i++) {
       final a = particles[i];
       final ap = a.pos + parallax * 0.25;
@@ -1129,7 +1300,6 @@ class _MeshPainter extends CustomPainter {
       }
     }
 
-    // Draw particles
     final dotPaint = Paint()..style = PaintingStyle.fill;
     for (final p in particles) {
       final pos = p.pos + parallax * 0.6;
@@ -1137,7 +1307,6 @@ class _MeshPainter extends CustomPainter {
       canvas.drawCircle(pos, p.radius, dotPaint);
     }
 
-    // Vignette
     final vignette = Paint()
       ..shader = RadialGradient(
         center: Alignment.center,
@@ -1166,7 +1335,7 @@ class _SectionHeader extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(title, style: const TextStyle(color: Colors.white, fontSize: 19, fontWeight: FontWeight.w700)),
+        Text(title, style: const TextStyle(color: Colors.white, fontSize: 19, fontWeight: FontWeight.w800)),
         const SizedBox(height: 4),
         Text(subtitle, style: TextStyle(color: Colors.white.withOpacity(0.65), fontSize: 13)),
       ],
@@ -1175,7 +1344,281 @@ class _SectionHeader extends StatelessWidget {
 }
 
 // =========================
-// ✅ Use Cases Row (LEFT aligned; no centering)
+// ✅ (7) Stats row
+// =========================
+class _StatsRow extends StatelessWidget {
+  final Map<String, int> stats;
+
+  const _StatsRow({required this.stats});
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(builder: (context, c) {
+      final isWeb = c.maxWidth >= 900;
+      final items = stats.entries.toList();
+
+      return Row(
+        children: items.map((e) {
+          final idx = items.indexOf(e);
+          return Expanded(
+            child: Padding(
+              padding: EdgeInsets.only(right: idx == items.length - 1 ? 0 : (isWeb ? 14 : 10)),
+              child: _MiniStatCard(label: e.key, value: e.value),
+            ),
+          );
+        }).toList(),
+      );
+    });
+  }
+}
+
+class _MiniStatCard extends StatelessWidget {
+  final String label;
+  final int value;
+
+  const _MiniStatCard({required this.label, required this.value});
+
+  Color _accentFor(String label) {
+    switch (label.toLowerCase()) {
+      case "models":
+        return const Color(0xFF8A4FFF);
+      case "scans":
+        return const Color(0xFFF72585);
+      case "downloads":
+        return const Color(0xFF4895EF);
+      default:
+        return const Color(0xFFBC70FF);
+    }
+  }
+
+  IconData _iconFor(String label) {
+    switch (label.toLowerCase()) {
+      case "models":
+        return Icons.view_in_ar_rounded;
+      case "scans":
+        return Icons.photo_camera_rounded;
+      case "downloads":
+        return Icons.download_rounded;
+      default:
+        return Icons.insights_rounded;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = _accentFor(label);
+    final icon = _iconFor(label);
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(18),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+          decoration: BoxDecoration(
+            color: Colors.black.withOpacity(0.18),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: Colors.white.withOpacity(0.12)),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  color: accent.withOpacity(0.18),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: accent.withOpacity(0.55)),
+                ),
+                child: Icon(icon, color: Colors.white.withOpacity(0.95), size: 18),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // ✅ Always one line even if long
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        label,
+                        maxLines: 1,
+                        softWrap: false,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(color: Colors.white.withOpacity(0.70), fontSize: 12, fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      "$value",
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 18),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// =========================
+// ✅ (1) Continue row
+// =========================
+class _ContinueRow extends StatelessWidget {
+  final List<Map<String, dynamic>> items;
+  final void Function(Map<String, dynamic> item) onTap;
+  final bool forceVerticalOnMobile;
+
+  const _ContinueRow({
+    required this.items,
+    required this.onTap,
+    this.forceVerticalOnMobile = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final w = MediaQuery.of(context).size.width;
+    final isNarrow = w < 520;
+
+    if (forceVerticalOnMobile && isNarrow) {
+      return Column(
+        children: items
+            .map((it) => Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: _ContinueCard(item: it, onTap: () => onTap(it)),
+                ))
+            .toList(),
+      );
+    }
+
+    return LayoutBuilder(builder: (context, c) {
+      final isWeb = c.maxWidth >= 900;
+
+      if (isWeb) {
+        return Row(
+          children: items.map((it) {
+            final idx = items.indexOf(it);
+            return Expanded(
+              child: Padding(
+                padding: EdgeInsets.only(right: idx == items.length - 1 ? 0 : 14),
+                child: _ContinueCard(item: it, onTap: () => onTap(it)),
+              ),
+            );
+          }).toList(),
+        );
+      }
+
+      return SizedBox(
+        height: 100,
+        child: ListView.separated(
+          scrollDirection: Axis.horizontal,
+          physics: const BouncingScrollPhysics(),
+          itemCount: items.length,
+          separatorBuilder: (_, __) => const SizedBox(width: 12),
+          itemBuilder: (context, i) {
+            return SizedBox(
+              width: 290,
+              child: _ContinueCard(item: items[i], onTap: () => onTap(items[i])),
+            );
+          },
+        ),
+      );
+    });
+  }
+}
+
+class _ContinueCard extends StatefulWidget {
+  final Map<String, dynamic> item;
+  final VoidCallback onTap;
+
+  const _ContinueCard({required this.item, required this.onTap});
+
+  @override
+  State<_ContinueCard> createState() => _ContinueCardState();
+}
+
+class _ContinueCardState extends State<_ContinueCard> {
+  bool _hover = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final isWeb = MediaQuery.of(context).size.width >= 900;
+    final Color accent = widget.item["accent"] as Color;
+    final IconData icon = widget.item["icon"] as IconData;
+    final String title = widget.item["title"] as String;
+    final String subtitle = widget.item["subtitle"] as String;
+
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOut,
+          transform: Matrix4.identity()..translate(0.0, (_hover && isWeb) ? -5.0 : 0.0),
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: Colors.black.withOpacity(0.20),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: _hover ? Colors.white.withOpacity(0.20) : Colors.white.withOpacity(0.12)),
+            boxShadow: [
+              BoxShadow(
+                blurRadius: _hover ? 24 : 18,
+                color: Colors.black.withOpacity(_hover ? 0.45 : 0.30),
+                offset: const Offset(0, 12),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: accent.withOpacity(0.18),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: accent.withOpacity(0.55)),
+                ),
+                child: Icon(icon, color: Colors.white, size: 22),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 14),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      subtitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(color: Colors.white.withOpacity(0.70), fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.arrow_forward_rounded, color: Colors.white70),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// =========================
+// ✅ Use Cases Row
 // =========================
 class UseCasesRow extends StatelessWidget {
   final List<Map<String, String>> items;
@@ -1281,11 +1724,7 @@ class _UseCaseTileState extends State<_UseCaseTile> {
                       height: 105,
                       width: double.infinity,
                       decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: baseColors,
-                        ),
+                        gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: baseColors),
                         borderRadius: BorderRadius.circular(22),
                         border: Border.all(
                           color: widget.isActive ? Colors.white.withOpacity(0.28) : Colors.white.withOpacity(0.12),
@@ -1613,94 +2052,6 @@ class UseCaseDetailsSectionMobile extends StatelessWidget {
 }
 
 // =========================
-// Skeletons
-// =========================
-class _HomeSkeleton extends StatelessWidget {
-  const _HomeSkeleton();
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: const [
-        _ShimmerBox(height: 130, radius: 26),
-        SizedBox(height: 18),
-        _ShimmerBox(height: 90, radius: 20),
-        SizedBox(height: 10),
-        _ShimmerBox(height: 90, radius: 20),
-        SizedBox(height: 26),
-      ],
-    );
-  }
-}
-
-class _AiSkeleton extends StatelessWidget {
-  const _AiSkeleton();
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: const [
-        _ShimmerBox(height: 80, radius: 22),
-        SizedBox(height: 14),
-        _ShimmerBox(height: 120, radius: 22),
-        SizedBox(height: 18),
-        _ShimmerBox(height: 52, radius: 18),
-      ],
-    );
-  }
-}
-
-class _PhotogrammetrySkeleton extends StatelessWidget {
-  const _PhotogrammetrySkeleton();
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: const [
-        _ShimmerBox(height: 150, radius: 26),
-        SizedBox(height: 18),
-        _ShimmerBox(height: 70, radius: 18),
-        SizedBox(height: 10),
-        _ShimmerBox(height: 70, radius: 18),
-      ],
-    );
-  }
-}
-
-class _MarketplaceSkeleton extends StatelessWidget {
-  const _MarketplaceSkeleton();
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: const [
-        _ShimmerBox(height: 140, radius: 26),
-        SizedBox(height: 18),
-        _ShimmerBox(height: 70, radius: 18),
-        SizedBox(height: 10),
-        _ShimmerBox(height: 70, radius: 18),
-      ],
-    );
-  }
-}
-
-class _ShimmerBox extends StatelessWidget {
-  final double height;
-  final double radius;
-
-  const _ShimmerBox({required this.height, required this.radius});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      height: height,
-      decoration: BoxDecoration(color: Colors.white.withOpacity(0.06), borderRadius: BorderRadius.circular(radius)),
-    );
-  }
-}
-
-// =========================
 // Small UI pieces
 // =========================
 class _NavTextButton extends StatelessWidget {
@@ -1723,204 +2074,241 @@ class _NavTextButton extends StatelessWidget {
   }
 }
 
-class _FeatureCard extends StatelessWidget {
-  final IconData icon;
+// =========================
+// ✅ Home Action Card (glass + popout)
+// =========================
+class _HomeActionCard extends StatefulWidget {
   final String title;
   final String subtitle;
-  final String badge;
-  final List<Color> gradient;
-
-  const _FeatureCard({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.badge,
-    required this.gradient,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(22),
-        gradient: LinearGradient(colors: gradient, begin: Alignment.topLeft, end: Alignment.bottomRight),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(icon, color: Colors.white, size: 18),
-              const SizedBox(width: 8),
-              Text(badge, style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600)),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Text(title, style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w700)),
-          const SizedBox(height: 4),
-          Text(subtitle, style: const TextStyle(color: Colors.white70, fontSize: 13)),
-        ],
-      ),
-    );
-  }
-}
-
-/// ✅ UPDATED: clickable Trending card
-class _TrendingCard extends StatelessWidget {
-  final String name;
-  final String likes;
-  final String tag;
+  final IconData icon;
+  final Color accent;
   final VoidCallback onTap;
 
-  const _TrendingCard({
-    required this.name,
-    required this.likes,
-    required this.tag,
+  final String primaryLabel;
+  final String secondaryLabel;
+  final VoidCallback? onSecondaryTap;
+
+  final List<String> bullets;
+
+  const _HomeActionCard({
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.accent,
     required this.onTap,
+    required this.primaryLabel,
+    required this.secondaryLabel,
+    required this.onSecondaryTap,
+    required this.bullets,
   });
 
   @override
+  State<_HomeActionCard> createState() => _HomeActionCardState();
+}
+
+class _HomeActionCardState extends State<_HomeActionCard> {
+  bool _hover = false;
+
+  @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(18),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-        decoration: BoxDecoration(
-          color: const Color(0xFF191924),
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: Colors.white.withOpacity(0.12)),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(color: const Color(0xFF8A4FFF), borderRadius: BorderRadius.circular(14)),
-              child: const Icon(Icons.extension_rounded, color: Colors.white, size: 22),
+    final isWeb = MediaQuery.of(context).size.width >= 900;
+
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOut,
+          transform: Matrix4.identity()..translate(0.0, (_hover && isWeb) ? -6.0 : 0.0),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.black.withOpacity(0.22),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(
+              color: _hover ? Colors.white.withOpacity(0.22) : Colors.white.withOpacity(0.12),
+              width: _hover ? 1.3 : 1,
             ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+            boxShadow: [
+              BoxShadow(
+                blurRadius: _hover ? 28 : 18,
+                color: Colors.black.withOpacity(_hover ? 0.45 : 0.30),
+                offset: const Offset(0, 12),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
                 children: [
-                  Text(
-                    name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: Colors.white, fontSize: 13.5, fontWeight: FontWeight.w600),
+                  Container(
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                      color: widget.accent.withOpacity(0.18),
+                      shape: BoxShape.circle,
+                      border: Border.all(color: widget.accent.withOpacity(0.55), width: 1),
+                    ),
+                    child: Icon(widget.icon, color: Colors.white, size: 22),
                   ),
-                  const SizedBox(height: 2),
-                  Text(tag, style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 12)),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          widget.title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 16),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          widget.subtitle,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(color: Colors.white.withOpacity(0.72), height: 1.25),
+                        ),
+                      ],
+                    ),
+                  ),
                 ],
               ),
-            ),
-            Row(
-              children: [
-                const Icon(Icons.favorite_border_rounded, color: Colors.white70, size: 16),
-                const SizedBox(width: 4),
-                Text(likes, style: const TextStyle(color: Colors.white70, fontSize: 12)),
-              ],
-            ),
-          ],
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: widget.bullets
+                    .map((b) => Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.06),
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(color: Colors.white.withOpacity(0.10)),
+                          ),
+                          child: Text(
+                            b,
+                            style: TextStyle(
+                              color: Colors.white.withOpacity(0.88),
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ))
+                    .toList(),
+              ),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: widget.onTap,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: widget.accent.withOpacity(0.22),
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        side: BorderSide(color: widget.accent.withOpacity(0.55), width: 1),
+                      ),
+                      child: Text(widget.primaryLabel, style: const TextStyle(fontWeight: FontWeight.w900)),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: widget.onSecondaryTap,
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.white,
+                        side: BorderSide(color: Colors.white.withOpacity(0.18)),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                      child: Text(widget.secondaryLabel, style: const TextStyle(fontWeight: FontWeight.w800)),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 }
 
-class _ScanHistoryCard extends StatelessWidget {
-  final String title;
-  final String status;
-  final String time;
-
-  const _ScanHistoryCard({required this.title, required this.status, required this.time});
-
-  Color _statusColor() {
-    switch (status) {
-      case "Completed":
-        return const Color(0xFF4CAF50);
-      case "Processing":
-        return const Color(0xFFFFC107);
-      case "Failed":
-        return const Color(0xFFF44336);
-      default:
-        return Colors.white70;
-    }
-  }
+class _TipsSheet extends StatelessWidget {
+  const _TipsSheet();
 
   @override
   Widget build(BuildContext context) {
-    final sc = _statusColor();
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: const Color(0xFF191924),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: Colors.white.withOpacity(0.10)),
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(22),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.black.withOpacity(0.35),
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(color: Colors.white.withOpacity(0.14)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text("Scan Tips", style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 16)),
+              const SizedBox(height: 10),
+              _tip("Use bright, even lighting (no harsh shadows)."),
+              _tip("Capture 20–40 photos from all angles."),
+              _tip("Keep the object centered, move around it."),
+              _tip("Avoid reflective/transparent objects if possible."),
+              const SizedBox(height: 14),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFF72585).withOpacity(0.22),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    side: BorderSide(color: const Color(0xFFF72585).withOpacity(0.55), width: 1),
+                  ),
+                  child: const Text("Got it", style: TextStyle(fontWeight: FontWeight.w900)),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
+    );
+  }
+
+  Widget _tip(String text) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
       child: Row(
         children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(color: Colors.white.withOpacity(0.06), borderRadius: BorderRadius.circular(12)),
-            child: const Icon(Icons.photo_camera_rounded, color: Colors.white70, size: 20),
-          ),
+          const Icon(Icons.check_circle, color: Color(0xFF22C55E), size: 18),
           const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(height: 2),
-                Text(time, style: const TextStyle(color: Colors.white54, fontSize: 12)),
-              ],
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: sc.withOpacity(0.16),
-              borderRadius: BorderRadius.circular(30),
-              border: Border.all(color: sc.withOpacity(0.7), width: 0.8),
-            ),
-            child: Text(
-              status,
-              style: TextStyle(color: sc, fontSize: 11.5, fontWeight: FontWeight.w600),
-            ),
-          ),
+          Expanded(child: Text(text, style: TextStyle(color: Colors.white.withOpacity(0.85), height: 1.25))),
         ],
       ),
     );
   }
 }
 
-/// =========================
-/// ✅ POPUP (same page) with ModelViewer + details
-/// =========================
-class _MarketModelPopup extends StatefulWidget {
+// =====================================================================
+// ✅ Popup panel (kept same as before)
+// =====================================================================
+class _HomeMarketModelPanel extends StatelessWidget {
   final MarketModel model;
   final VoidCallback onClose;
 
-  const _MarketModelPopup({required this.model, required this.onClose});
-
-  @override
-  State<_MarketModelPopup> createState() => _MarketModelPopupState();
-}
-
-class _MarketModelPopupState extends State<_MarketModelPopup> {
-  int tab = 0; // 0 geometry, 1 material
-  bool shaded = true;
-  bool pbr = true;
-  String resolution = "2K";
+  const _HomeMarketModelPanel({required this.model, required this.onClose});
 
   @override
   Widget build(BuildContext context) {
@@ -1928,351 +2316,79 @@ class _MarketModelPopupState extends State<_MarketModelPopup> {
     final isWeb = size.width >= 900;
 
     return GestureDetector(
-      onTap: widget.onClose,
+      onTap: onClose,
       child: Container(
         color: Colors.black.withOpacity(0.60),
         child: Center(
           child: GestureDetector(
-            onTap: () {}, // do not close when clicking inside
+            onTap: () {},
             child: ConstrainedBox(
               constraints: BoxConstraints(
-                maxWidth: isWeb ? 1160 : size.width - 18,
+                maxWidth: isWeb ? 1100 : size.width - 18,
                 maxHeight: isWeb ? 680 : size.height * 0.86,
               ),
-              child: Material(
-                color: Colors.white.withOpacity(0.92),
-                borderRadius: BorderRadius.circular(28),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(28),
-                  child: Column(
-                    children: [
-                      _header(),
-                      Expanded(
-                        child: Padding(
-                          padding: const EdgeInsets.all(14),
-                          child: isWeb ? _webLayout() : _mobileLayout(),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _header() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.90),
-        border: Border(bottom: BorderSide(color: Colors.black.withOpacity(0.08))),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 34,
-            height: 34,
-            decoration: BoxDecoration(color: Colors.black.withOpacity(0.06), shape: BoxShape.circle),
-            child: Icon(Icons.person, color: Colors.black.withOpacity(0.55)),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              widget.model.author,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.w900, fontSize: 16),
-            ),
-          ),
-          _circleBtn(Icons.link),
-          const SizedBox(width: 8),
-          _circleBtn(Icons.favorite_border),
-          const SizedBox(width: 8),
-          _circleBtn(Icons.close, onTap: widget.onClose),
-        ],
-      ),
-    );
-  }
-
-  Widget _circleBtn(IconData icon, {VoidCallback? onTap}) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(999),
-      child: Container(
-        width: 36,
-        height: 36,
-        decoration: BoxDecoration(color: Colors.black.withOpacity(0.05), shape: BoxShape.circle),
-        child: Icon(icon, size: 18, color: Colors.black.withOpacity(0.65)),
-      ),
-    );
-  }
-
-  Widget _webLayout() {
-    return Row(
-      children: [
-        Expanded(flex: 6, child: _viewer()),
-        const SizedBox(width: 14),
-        Expanded(flex: 5, child: _rightPanel()),
-      ],
-    );
-  }
-
-  Widget _mobileLayout() {
-    return Column(
-      children: [
-        Expanded(flex: 6, child: _viewer()),
-        const SizedBox(height: 12),
-        Expanded(flex: 5, child: _rightPanel()),
-      ],
-    );
-  }
-
-  Widget _viewer() {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(22),
-      child: Container(
-        color: Colors.black.withOpacity(0.06),
-        child: ModelViewer(
-          src: widget.model.glbAssetPath,
-          poster: widget.model.posterAssetPath,
-          autoRotate: true,
-          cameraControls: true,
-          ar: false,
-          backgroundColor: Colors.transparent,
-          shadowIntensity: 1,
-        ),
-      ),
-    );
-  }
-
-  Widget _rightPanel() {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(22),
-      child: Container(
-        color: Colors.black.withOpacity(0.04),
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                _pillTab("Geometry", tab == 0, () => setState(() => tab = 0)),
-                const SizedBox(width: 8),
-                _pillTab("Material", tab == 1, () => setState(() => tab = 1)),
-                const Spacer(),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF3E8FF),
-                    borderRadius: BorderRadius.circular(999),
-                    border: Border.all(color: Colors.black.withOpacity(0.06)),
-                  ),
-                  child: const Text(
-                    "Gen-2",
-                    style: TextStyle(color: Color(0xFF7C3AED), fontWeight: FontWeight.w900),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.92),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.black.withOpacity(0.06)),
-              ),
-              child: Text(
-                widget.model.description,
-                style: TextStyle(color: Colors.black.withOpacity(0.72), height: 1.3),
-              ),
-            ),
-
-            const SizedBox(height: 10),
-
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: widget.model.tags.map(_tagChip).toList(),
-            ),
-
-            const SizedBox(height: 14),
-
-            Expanded(
               child: ClipRRect(
-                borderRadius: BorderRadius.circular(18),
-                child: Container(
-                  color: Colors.white.withOpacity(0.70),
-                  padding: const EdgeInsets.all(12),
-                  child: SingleChildScrollView(
+                borderRadius: BorderRadius.circular(24),
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+                  child: Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.22),
+                      borderRadius: BorderRadius.circular(24),
+                      border: Border.all(color: Colors.white.withOpacity(0.14)),
+                    ),
                     child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          tab == 0 ? "Pack • Geometry" : "Pack • Material",
-                          style: TextStyle(color: Colors.black.withOpacity(0.75), fontWeight: FontWeight.w900),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                model.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 16),
+                              ),
+                            ),
+                            InkWell(
+                              onTap: onClose,
+                              borderRadius: BorderRadius.circular(999),
+                              child: Container(
+                                width: 36,
+                                height: 36,
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withOpacity(0.10),
+                                  shape: BoxShape.circle,
+                                  border: Border.all(color: Colors.white.withOpacity(0.12)),
+                                ),
+                                child: const Icon(Icons.close, size: 18, color: Colors.white70),
+                              ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(height: 12),
-                        if (tab == 0) ...[
-                          _checkRow("Base Model", true, (_) {}),
-                          _checkRow("LOD", false, (_) {}),
-                          const SizedBox(height: 10),
-                          _formatRow(),
-                        ] else ...[
-                          _checkRow("Shaded", shaded, (v) => setState(() => shaded = v)),
-                          _checkRow("PBR", pbr, (v) => setState(() => pbr = v)),
-                          const SizedBox(height: 12),
-                          Text(
-                            "Resolution",
-                            style: TextStyle(color: Colors.black.withOpacity(0.70), fontWeight: FontWeight.w900),
+                        const SizedBox(height: 10),
+                        Expanded(
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(18),
+                            child: Container(
+                              color: Colors.black.withOpacity(0.18),
+                              child: ModelViewer(
+                                key: ValueKey(model.glbAssetPath),
+                                src: model.glbAssetPath,
+                                poster: model.posterAssetPath,
+                                backgroundColor: Colors.transparent,
+                                cameraControls: true,
+                                autoRotate: true,
+                                environmentImage: "neutral",
+                              ),
+                            ),
                           ),
-                          const SizedBox(height: 8),
-                          Row(
-                            children: [
-                              _resBtn("2K"),
-                              const SizedBox(width: 8),
-                              _resBtn("4K"),
-                            ],
-                          ),
-                        ],
+                        ),
                       ],
                     ),
                   ),
                 ),
               ),
-            ),
-
-            const SizedBox(height: 12),
-
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: () {},
-                    icon: const Icon(Icons.send),
-                    label: const Text("Send"),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.black.withOpacity(0.75),
-                      side: BorderSide(color: Colors.black.withOpacity(0.12)),
-                      backgroundColor: Colors.white.withOpacity(0.86),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: () {},
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF7C3AED),
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                    ),
-                    child: const Text("Download", style: TextStyle(fontWeight: FontWeight.w900)),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _pillTab(String text, bool active, VoidCallback onTap) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(999),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: active ? const Color(0xFFEDE9FE) : Colors.white.withOpacity(0.70),
-          borderRadius: BorderRadius.circular(999),
-          border: Border.all(color: Colors.black.withOpacity(0.08)),
-        ),
-        child: Text(
-          text,
-          style: TextStyle(color: Colors.black.withOpacity(0.75), fontWeight: FontWeight.w900),
-        ),
-      ),
-    );
-  }
-
-  Widget _tagChip(String text) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: const Color(0xFFEFEFFE),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: Colors.black.withOpacity(0.06)),
-      ),
-      child: Text(text, style: TextStyle(color: Colors.black.withOpacity(0.75), fontWeight: FontWeight.w800)),
-    );
-  }
-
-  Widget _checkRow(String label, bool value, ValueChanged<bool> onChanged) {
-    return Row(
-      children: [
-        Checkbox(value: value, onChanged: (v) => onChanged(v ?? false), visualDensity: VisualDensity.compact),
-        Expanded(
-          child: Text(
-            label,
-            style: TextStyle(color: Colors.black.withOpacity(0.75), fontWeight: FontWeight.w800),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _formatRow() {
-    final formats = [".obj", ".fbx", ".glb", ".usdz", ".stl"];
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: formats
-          .map(
-            (f) => Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.85),
-                borderRadius: BorderRadius.circular(999),
-                border: Border.all(color: Colors.black.withOpacity(0.08)),
-              ),
-              child: Text(
-                f,
-                style: TextStyle(color: Colors.black.withOpacity(0.75), fontWeight: FontWeight.w900),
-              ),
-            ),
-          )
-          .toList(),
-    );
-  }
-
-  Widget _resBtn(String label) {
-    final selected = resolution == label;
-    return Expanded(
-      child: InkWell(
-        onTap: () => setState(() => resolution = label),
-        borderRadius: BorderRadius.circular(14),
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          decoration: BoxDecoration(
-            color: selected ? const Color(0xFFEDE9FE) : Colors.white.withOpacity(0.75),
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: Colors.black.withOpacity(0.08)),
-          ),
-          child: Center(
-            child: Text(
-              label,
-              style: TextStyle(color: Colors.black.withOpacity(0.75), fontWeight: FontWeight.w900),
             ),
           ),
         ),

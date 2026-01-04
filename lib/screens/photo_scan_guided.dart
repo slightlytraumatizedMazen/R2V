@@ -1,8 +1,14 @@
 import 'dart:async';
+import 'dart:math';
+import 'dart:typed_data';
 import 'dart:ui';
+
+import 'package:flutter/scheduler.dart';
 import 'package:camera/camera.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'widgets/animated_slide_fade.dart';
+import 'package:image_picker/image_picker.dart';
 
 class PhotoScanGuidedScreen extends StatefulWidget {
   const PhotoScanGuidedScreen({Key? key}) : super(key: key);
@@ -13,349 +19,952 @@ class PhotoScanGuidedScreen extends StatefulWidget {
 
 class _PhotoScanGuidedScreenState extends State<PhotoScanGuidedScreen>
     with SingleTickerProviderStateMixin {
-  late final AnimationController _introController;
+  // ---------- theme ----------
+  static const accent = Color(0xFFBC70FF);
+  static const accent2 = Color(0xFF8A4FFF);
+  static const green = Color(0xFF22C55E);
 
-  CameraController? _cameraController;
-  bool _isCameraReady = false;
-  bool _isCapturing = false;
+  // ---------- animation ----------
+  late final AnimationController _intro;
+
+  // ---------- capture state ----------
+  CameraController? _cam;
+  bool _ready = false;
+  bool _capturing = false;
 
   int _photoCount = 0;
+  final int _target = 40;
+
+  // ---------- upload state ----------
+  Uint8List? _webPickedBytes;
+  String? _webPickedName;
 
   @override
   void initState() {
     super.initState();
+    _intro = AnimationController(vsync: this, duration: const Duration(milliseconds: 700))
+      ..forward();
 
-    _introController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 800),
-    )..forward();
-
-    _initializeCamera();
+    // ✅ only init camera on mobile
+    if (!kIsWeb) {
+      _initCamera();
+    }
   }
 
-  Future<void> _initializeCamera() async {
+  Future<void> _initCamera() async {
     try {
-      final cameras = await availableCameras();
-      final camera = cameras.first;
+      final cams = await availableCameras();
+      final cam = cams.first;
 
-      _cameraController = CameraController(
-        camera,
-        ResolutionPreset.medium,
+      final controller = CameraController(
+        cam,
+        ResolutionPreset.high,
         enableAudio: false,
+        imageFormatGroup: ImageFormatGroup.jpeg,
       );
 
-      await _cameraController!.initialize();
+      await controller.initialize();
+      if (!mounted) return;
 
-      setState(() => _isCameraReady = true);
+      setState(() {
+        _cam = controller;
+        _ready = true;
+      });
     } catch (e) {
-      print("Camera init error: $e");
+      // ignore (you can show dialog)
+      debugPrint("Camera init error: $e");
     }
   }
 
   @override
   void dispose() {
-    _introController.dispose();
-    _cameraController?.dispose();
+    _intro.dispose();
+    _cam?.dispose();
     super.dispose();
   }
 
-  // 🔹 Safe capture: prevents ImageReader overflow
-  Future<void> _onCapturePressed() async {
-    if (_isCapturing || !_cameraController!.value.isInitialized) return;
+  // ------------------------------------------------------------
+  // MOBILE: camera capture (safe)
+  // ------------------------------------------------------------
+  Future<void> _capture() async {
+    if (kIsWeb) return;
+    if (_capturing) return;
+    if (_cam == null || !_cam!.value.isInitialized) return;
 
-    setState(() => _isCapturing = true);
-
+    setState(() => _capturing = true);
     try {
-      await _cameraController!.takePicture();
+      await _cam!.takePicture();
+      if (!mounted) return;
       setState(() => _photoCount++);
     } catch (e) {
-      print("Capture error: $e");
+      debugPrint("Capture error: $e");
     } finally {
-      await Future.delayed(const Duration(milliseconds: 350));
-      setState(() => _isCapturing = false);
+      await Future.delayed(const Duration(milliseconds: 250));
+      if (mounted) setState(() => _capturing = false);
     }
   }
 
-  void _onFinishPressed() {
+  // ------------------------------------------------------------
+  // MOBILE: upload from gallery (optional)
+  // ------------------------------------------------------------
+  Future<void> _pickFromGalleryMobile() async {
+    if (kIsWeb) return;
+    final picker = ImagePicker();
+    try {
+      final x = await picker.pickImage(source: ImageSource.gallery, imageQuality: 92);
+      if (x == null) return;
+
+      // For your pipeline: you can send x.path to backend / next screen
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Selected: ${x.name}"),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (e) {
+      debugPrint("Gallery pick error: $e");
+    }
+  }
+
+  // ------------------------------------------------------------
+  // WEB: upload only
+  // ------------------------------------------------------------
+  Future<void> _pickOnWeb() async {
+    if (!kIsWeb) return;
+
+    final res = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowMultiple: false,
+      allowedExtensions: const ["png", "jpg", "jpeg", "webp"],
+      withData: true,
+    );
+
+    if (res == null || res.files.isEmpty) return;
+
+    final f = res.files.first;
+    setState(() {
+      _webPickedBytes = f.bytes;
+      _webPickedName = f.name;
+    });
+  }
+
+  void _finish() {
+    if (kIsWeb) {
+      if (_webPickedBytes == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Upload at least one image first."),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Ready: $_webPickedName"),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(
-          "Captured $_photoCount photos — ready for next step.",
-        ),
+        content: Text("Captured $_photoCount photos — ready for next step."),
+        behavior: SnackBarBehavior.floating,
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    const bg = Color(0xFFCAF0F8);
-    const pink = Color(0xFFF72585);
-    final width = MediaQuery.of(context).size.width;
-    final height = MediaQuery.of(context).size.height;
+    final isWebWide = MediaQuery.of(context).size.width >= 900;
+    final safeTop = MediaQuery.of(context).padding.top;
+    final safeBottom = MediaQuery.of(context).padding.bottom;
 
-    final topHeight = height * 0.22;
+    return Stack(
+      children: [
+        const Positioned.fill(child: NebulaMeshBackground()),
 
-    return Scaffold(
-      backgroundColor: bg,
-      body: Stack(
-        children: [
-          // 🔹 Top pattern
-          AnimatedSlideFade(
-            controller: _introController,
-            beginOffset: const Offset(0, -0.4),
-            startInterval: 0.0,
-            endInterval: 0.4,
-            child: ClipRRect(
-              borderRadius: const BorderRadius.only(
-                bottomLeft: Radius.circular(50),
-                bottomRight: Radius.circular(50),
-              ),
-              child: SizedBox(
-                width: width,
-                height: topHeight,
-                child: Image.asset(
-                  'assets/top_pattern.png',
-                  fit: BoxFit.cover,
-                ),
-              ),
-            ),
-          ),
+        Scaffold(
+          backgroundColor: Colors.transparent,
 
-          SafeArea(
-            child: Column(
-              children: [
-                // 🔹 Top bar
-                Padding(
-                  padding: EdgeInsets.symmetric(horizontal: width * 0.05, vertical: 8),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      AnimatedSlideFade(
-                        controller: _introController,
-                        beginOffset: const Offset(-0.4, 0),
-                        startInterval: 0.1,
-                        endInterval: 0.5,
-                        child: InkWell(
-                          borderRadius: BorderRadius.circular(12),
-                          onTap: () => Navigator.pop(context),
-                          child: Container(
-                            width: 36,
-                            height: 36,
-                            decoration: BoxDecoration(
-                              color: Colors.black87.withOpacity(0.7),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: const Icon(
-                              Icons.arrow_back_ios_new_rounded,
-                              size: 18,
-                              color: Colors.white,
-                            ),
+          // ✅ Web = upload only
+          body: kIsWeb
+              ? Center(
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(maxWidth: isWebWide ? 980 : 560),
+                    child: Padding(
+                      padding: EdgeInsets.fromLTRB(16, safeTop + 18, 16, safeBottom + 18),
+                      child: Column(
+                        children: [
+                          _TopGlassBar(
+                            title: "Photo Scan",
+                            subtitle: "Web Upload",
+                            onBack: () => Navigator.pop(context),
                           ),
-                        ),
-                      ),
-                      AnimatedSlideFade(
-                        controller: _introController,
-                        beginOffset: const Offset(0.4, 0),
-                        startInterval: 0.1,
-                        endInterval: 0.5,
-                        child: Row(
-                          children: const [
-                            Icon(Icons.sensors, color: Colors.white, size: 18),
-                            SizedBox(width: 4),
-                            Text(
-                              "Photo Scan",
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w600,
-                                fontSize: 14,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+                          const SizedBox(height: 16),
 
-                const SizedBox(height: 4),
+                          Expanded(
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(26),
+                              child: BackdropFilter(
+                                filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+                                child: Container(
+                                  padding: const EdgeInsets.all(18),
+                                  decoration: BoxDecoration(
+                                    color: Colors.black.withOpacity(0.18),
+                                    borderRadius: BorderRadius.circular(26),
+                                    border: Border.all(color: Colors.white.withOpacity(0.12)),
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      _TipsRow(),
+                                      const SizedBox(height: 14),
 
-                // 🔹 Camera preview
-                Expanded(
-                  child: AnimatedSlideFade(
-                    controller: _introController,
-                    beginOffset: const Offset(0, 0.3),
-                    startInterval: 0.2,
-                    endInterval: 0.8,
-                    child: Container(
-                      margin: EdgeInsets.symmetric(horizontal: width * 0.05),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(22),
-                        border: Border.all(
-                          color: Colors.white.withOpacity(0.2),
-                          width: 1.2,
-                        ),
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(22),
-                        child: _isCameraReady
-                            ? Stack(
-                                children: [
-                                  CameraPreview(_cameraController!),
-
-                                  // 🔹 Floating Glass Counter
-                                  Positioned(
-                                    top: 12,
-                                    right: 12,
-                                    child: ClipRRect(
-                                      borderRadius: BorderRadius.circular(18),
-                                      child: BackdropFilter(
-                                        filter: ImageFilter.blur(sigmaX: 9, sigmaY: 9),
-                                        child: Container(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 12,
-                                            vertical: 6,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: Colors.white.withOpacity(0.25),
-                                            border: Border.all(
-                                              color: Colors.white.withOpacity(0.4),
+                                      Expanded(
+                                        child: GestureDetector(
+                                          onTap: _pickOnWeb,
+                                          child: Container(
+                                            width: double.infinity,
+                                            decoration: BoxDecoration(
+                                              color: Colors.white.withOpacity(0.06),
+                                              borderRadius: BorderRadius.circular(22),
+                                              border: Border.all(color: Colors.white.withOpacity(0.14)),
                                             ),
-                                            borderRadius: BorderRadius.circular(18),
-                                          ),
-                                          child: Row(
-                                            children: [
-                                              const Icon(
-                                                Icons.camera_alt_rounded,
-                                                size: 16,
-                                                color: Colors.white,
+                                            child: Center(
+                                              child: Column(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Icon(Icons.cloud_upload_rounded,
+                                                      size: 44, color: Colors.white.withOpacity(0.8)),
+                                                  const SizedBox(height: 10),
+                                                  Text(
+                                                    _webPickedBytes == null
+                                                        ? "Click to upload images"
+                                                        : "Selected: $_webPickedName",
+                                                    style: TextStyle(
+                                                      color: Colors.white.withOpacity(0.9),
+                                                      fontWeight: FontWeight.w700,
+                                                    ),
+                                                  ),
+                                                  const SizedBox(height: 6),
+                                                  Text(
+                                                    "PNG / JPG / JPEG / WEBP",
+                                                    style: TextStyle(color: Colors.white.withOpacity(0.6)),
+                                                  ),
+                                                ],
                                               ),
-                                              const SizedBox(width: 6),
-                                              Text(
-                                                "$_photoCount/40",
-                                                style: const TextStyle(
-                                                  fontSize: 14,
-                                                  color: Colors.white,
-                                                  fontWeight: FontWeight.w600,
-                                                ),
-                                              ),
-                                            ],
+                                            ),
                                           ),
                                         ),
                                       ),
-                                    ),
+
+                                      const SizedBox(height: 14),
+                                      Row(
+                                        children: [
+                                          Expanded(
+                                            child: OutlinedButton.icon(
+                                              onPressed: _pickOnWeb,
+                                              icon: const Icon(Icons.add_photo_alternate_outlined, size: 18),
+                                              label: const Text("Upload"),
+                                              style: OutlinedButton.styleFrom(
+                                                foregroundColor: Colors.white,
+                                                side: BorderSide(color: Colors.white.withOpacity(0.18)),
+                                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                                padding: const EdgeInsets.symmetric(vertical: 14),
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 10),
+                                          Expanded(
+                                            child: ElevatedButton(
+                                              onPressed: _finish,
+                                              style: ElevatedButton.styleFrom(
+                                                backgroundColor: accent2,
+                                                foregroundColor: Colors.white,
+                                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                                padding: const EdgeInsets.symmetric(vertical: 14),
+                                              ),
+                                              child: const Text("Finish & Continue",
+                                                  style: TextStyle(fontWeight: FontWeight.w900)),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
                                   ),
-                                ],
-                              )
-                            : const Center(
-                                child: CircularProgressIndicator(
-                                  color: pink,
                                 ),
                               ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
-                ),
+                )
 
-                const SizedBox(height: 20),
-
-                // 🔹 Liquid-Glass Capture Button
-                AnimatedSlideFade(
-                  controller: _introController,
-                  beginOffset: const Offset(0, 0.4),
-                  startInterval: 0.4,
-                  endInterval: 1.0,
-                  child: GestureDetector(
-                    onTap: _onCapturePressed,
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(35),
-                      child: BackdropFilter(
-                        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                        child: Container(
-                          width: 90,
-                          height: 90,
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(35),
-                            color: Colors.white.withOpacity(0.35),
-                            border: Border.all(
-                              color: Colors.white.withOpacity(0.55),
-                              width: 1.3,
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withOpacity(0.08),
-                                blurRadius: 18,
-                                offset: Offset(0, 6),
+              // ✅ Mobile = camera + upload
+              : Stack(
+                  children: [
+                    // FULLSCREEN camera area
+                    Positioned.fill(
+                      child: Padding(
+                        padding: EdgeInsets.fromLTRB(14, safeTop + 14, 14, safeBottom + 14),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(26),
+                          child: BackdropFilter(
+                            filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: Colors.black.withOpacity(0.20),
+                                borderRadius: BorderRadius.circular(26),
+                                border: Border.all(color: Colors.white.withOpacity(0.12)),
                               ),
-                            ],
-                          ),
-                          child: const Icon(
-                            Icons.camera_alt_rounded,
-                            color: pink,
-                            size: 42,
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(26),
+                                child: _ready && _cam != null
+                                    ? Stack(
+                                        fit: StackFit.expand,
+                                        children: [
+                                          CameraPreview(_cam!),
+
+                                          // Guide overlay (frame + grid)
+                                          const _GuideOverlay(),
+
+                                          // top glass bar
+                                          Positioned(
+                                            left: 12,
+                                            right: 12,
+                                            top: 12,
+                                            child: _TopGlassBar(
+                                              title: "Photo Scan",
+                                              subtitle: "Mobile Camera",
+                                              onBack: () => Navigator.pop(context),
+                                              trailing: _CounterChip(count: _photoCount, target: _target),
+                                            ),
+                                          ),
+
+                                          // tips chips
+                                          Positioned(
+                                            left: 12,
+                                            right: 12,
+                                            top: 78,
+                                            child: _TipsRow(compact: true),
+                                          ),
+
+                                          // bottom controls (glass)
+                                          Positioned(
+                                            left: 12,
+                                            right: 12,
+                                            bottom: 12,
+                                            child: ClipRRect(
+                                              borderRadius: BorderRadius.circular(24),
+                                              child: BackdropFilter(
+                                                filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+                                                child: Container(
+                                                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+                                                  decoration: BoxDecoration(
+                                                    color: Colors.black.withOpacity(0.22),
+                                                    borderRadius: BorderRadius.circular(24),
+                                                    border: Border.all(color: Colors.white.withOpacity(0.14)),
+                                                  ),
+                                                  child: Row(
+                                                    children: [
+                                                      // Upload (gallery)
+                                                      _SmallGlassButton(
+                                                        icon: Icons.photo_library_rounded,
+                                                        label: "Upload",
+                                                        onTap: _pickFromGalleryMobile,
+                                                      ),
+                                                      const Spacer(),
+
+                                                      // Capture
+                                                      GestureDetector(
+                                                        onTap: _capture,
+                                                        child: _CaptureButton(active: !_capturing),
+                                                      ),
+
+                                                      const Spacer(),
+
+                                                      // Finish
+                                                      _SmallGlassButton(
+                                                        icon: Icons.check_rounded,
+                                                        label: "Finish",
+                                                        onTap: _finish,
+                                                        accent: green,
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      )
+                                    : const Center(
+                                        child: _LoadingGlass(),
+                                      ),
+                              ),
+                            ),
                           ),
                         ),
                       ),
                     ),
-                  ),
+                  ],
                 ),
+        ),
+      ],
+    );
+  }
+}
 
-                const SizedBox(height: 20),
+// ============================================================
+// UI pieces
+// ============================================================
 
-                // 🔹 Finish button
-                AnimatedSlideFade(
-                  controller: _introController,
-                  beginOffset: const Offset(0, 0.4),
-                  startInterval: 0.5,
-                  endInterval: 1.0,
-                  child: Padding(
-                    padding: EdgeInsets.symmetric(horizontal: width * 0.08),
-                    child: GestureDetector(
-                      onTap: _onFinishPressed,
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(20),
-                        child: BackdropFilter(
-                          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-                          child: Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(20),
-                              color: Colors.white.withOpacity(0.35),
-                              border: Border.all(
-                                color: Colors.white.withOpacity(0.55),
-                                width: 1.3,
-                              ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withOpacity(0.08),
-                                  blurRadius: 15,
-                                  offset: Offset(0, 6),
-                                ),
-                              ],
-                            ),
-                            child: const Center(
-                              child: Text(
-                                "Finish & Continue",
-                                style: TextStyle(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w700,
-                                  color: pink,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
+class _TopGlassBar extends StatelessWidget {
+  final String title;
+  final String subtitle;
+  final VoidCallback onBack;
+  final Widget? trailing;
 
-                const SizedBox(height: 20),
-              ],
-            ),
+  const _TopGlassBar({
+    required this.title,
+    required this.subtitle,
+    required this.onBack,
+    this.trailing,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(999),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            color: Colors.black.withOpacity(0.28),
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(color: Colors.white.withOpacity(0.12)),
           ),
-        ],
+          child: Row(
+            children: [
+              InkWell(
+                onTap: onBack,
+                borderRadius: BorderRadius.circular(999),
+                child: Container(
+                  width: 34,
+                  height: 34,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.10),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white.withOpacity(0.12)),
+                  ),
+                  child: const Icon(Icons.arrow_back_ios_new_rounded, size: 18, color: Colors.white),
+                ),
+              ),
+              const SizedBox(width: 10),
+              const Icon(Icons.sensors_rounded, color: Colors.white, size: 18),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800)),
+                    Text(subtitle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(color: Colors.white.withOpacity(0.65), fontSize: 11)),
+                  ],
+                ),
+              ),
+              if (trailing != null) ...[
+                const SizedBox(width: 10),
+                trailing!,
+              ],
+            ],
+          ),
+        ),
       ),
     );
   }
+}
+
+class _CounterChip extends StatelessWidget {
+  final int count;
+  final int target;
+
+  const _CounterChip({required this.count, required this.target});
+
+  @override
+  Widget build(BuildContext context) {
+    final done = count >= target;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+      decoration: BoxDecoration(
+        color: (done ? const Color(0xFF22C55E) : const Color(0xFFBC70FF)).withOpacity(0.22),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(
+          color: (done ? const Color(0xFF22C55E) : const Color(0xFFBC70FF)).withOpacity(0.45),
+        ),
+      ),
+      child: Text(
+        "$count/$target",
+        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900),
+      ),
+    );
+  }
+}
+
+class _TipsRow extends StatelessWidget {
+  final bool compact;
+  const _TipsRow({this.compact = false});
+
+  @override
+  Widget build(BuildContext context) {
+    final items = const [
+      ("A", "Center object"),
+      ("B", "Move around"),
+      ("C", "40 photos"),
+      ("D", "Good light"),
+    ];
+
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: items.map((e) {
+        return Container(
+          padding: EdgeInsets.symmetric(horizontal: 10, vertical: compact ? 6 : 8),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.08),
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(color: Colors.white.withOpacity(0.14)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 20,
+                height: 20,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFBC70FF).withOpacity(0.22),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: const Color(0xFFBC70FF).withOpacity(0.5)),
+                ),
+                child: Text(e.$1, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900)),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                e.$2,
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.9),
+                  fontWeight: FontWeight.w700,
+                  fontSize: compact ? 12 : 13,
+                ),
+              ),
+            ],
+          ),
+        );
+      }).toList(),
+    );
+  }
+}
+
+class _SmallGlassButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final Color? accent;
+
+  const _SmallGlassButton({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.accent,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final a = accent ?? const Color(0xFFBC70FF);
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: a.withOpacity(0.12),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: a.withOpacity(0.35)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 18, color: Colors.white),
+            const SizedBox(width: 8),
+            Text(label, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CaptureButton extends StatelessWidget {
+  final bool active;
+  const _CaptureButton({required this.active});
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedOpacity(
+      duration: const Duration(milliseconds: 140),
+      opacity: active ? 1 : 0.6,
+      child: Container(
+        width: 78,
+        height: 78,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(26),
+          color: Colors.white.withOpacity(0.18),
+          border: Border.all(color: Colors.white.withOpacity(0.35), width: 1.2),
+          boxShadow: [
+            BoxShadow(color: Colors.black.withOpacity(0.20), blurRadius: 18, offset: const Offset(0, 8)),
+          ],
+        ),
+        child: const Icon(Icons.camera_alt_rounded, color: Color(0xFFBC70FF), size: 38),
+      ),
+    );
+  }
+}
+
+class _LoadingGlass extends StatelessWidget {
+  const _LoadingGlass();
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(22),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.black.withOpacity(0.20),
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(color: Colors.white.withOpacity(0.12)),
+          ),
+          child: const Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
+              SizedBox(width: 10),
+              Text("Preparing camera...", style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ============================================================
+// Guide overlay: frame + grid to help user center object
+// ============================================================
+
+class _GuideOverlay extends StatelessWidget {
+  const _GuideOverlay();
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: CustomPaint(
+        painter: _GuidePainter(),
+      ),
+    );
+  }
+}
+
+class _GuidePainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width;
+    final h = size.height;
+
+    // frame
+    final frameW = w * 0.72;
+    final frameH = h * 0.52;
+    final left = (w - frameW) / 2;
+    final top = (h - frameH) / 2;
+
+    final r = RRect.fromRectAndRadius(
+      Rect.fromLTWH(left, top, frameW, frameH),
+      const Radius.circular(18),
+    );
+
+    // subtle dark outside
+    final outside = Path()..addRect(Rect.fromLTWH(0, 0, w, h));
+    final inside = Path()..addRRect(r);
+    final overlay = Path.combine(PathOperation.difference, outside, inside);
+
+    final dimPaint = Paint()..color = Colors.black.withOpacity(0.25);
+    canvas.drawPath(overlay, dimPaint);
+
+    // frame border
+    final borderPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2
+      ..color = const Color(0xFFBC70FF).withOpacity(0.65);
+    canvas.drawRRect(r, borderPaint);
+
+    // grid inside frame
+    final gridPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1
+      ..color = Colors.white.withOpacity(0.18);
+
+    // vertical lines (rule of thirds)
+    canvas.drawLine(
+      Offset(left + frameW / 3, top),
+      Offset(left + frameW / 3, top + frameH),
+      gridPaint,
+    );
+    canvas.drawLine(
+      Offset(left + (frameW * 2) / 3, top),
+      Offset(left + (frameW * 2) / 3, top + frameH),
+      gridPaint,
+    );
+
+    // horizontal lines
+    canvas.drawLine(
+      Offset(left, top + frameH / 3),
+      Offset(left + frameW, top + frameH / 3),
+      gridPaint,
+    );
+    canvas.drawLine(
+      Offset(left, top + (frameH * 2) / 3),
+      Offset(left + frameW, top + (frameH * 2) / 3),
+      gridPaint,
+    );
+
+    // center dot
+    final dot = Paint()..color = Colors.white.withOpacity(0.5);
+    canvas.drawCircle(Offset(w / 2, h / 2), 3, dot);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+// ============================================================
+// Nebula background (same style as your Explore screen)
+// ============================================================
+
+class NebulaMeshBackground extends StatefulWidget {
+  const NebulaMeshBackground({super.key});
+
+  @override
+  State<NebulaMeshBackground> createState() => _NebulaMeshBackgroundState();
+}
+
+class _NebulaMeshBackgroundState extends State<NebulaMeshBackground>
+    with SingleTickerProviderStateMixin {
+  late final Ticker _ticker;
+  final Random _rng = Random(42);
+
+  Size _size = Size.zero;
+  Offset _mouse = Offset.zero;
+  bool _hasMouse = false;
+
+  late List<_NebulaParticle> _ps;
+  double _t = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _ps = <_NebulaParticle>[];
+    _ticker = createTicker((elapsed) {
+      _t = elapsed.inMilliseconds / 1000.0;
+      if (!mounted) return;
+      if (_size == Size.zero) return;
+
+      const dt = 1 / 60;
+      for (final p in _ps) {
+        p.pos = p.pos + p.vel * dt;
+        if (p.pos.dx < 0 || p.pos.dx > _size.width) p.vel = Offset(-p.vel.dx, p.vel.dy);
+        if (p.pos.dy < 0 || p.pos.dy > _size.height) p.vel = Offset(p.vel.dx, -p.vel.dy);
+        p.pos = Offset(p.pos.dx.clamp(0.0, _size.width), p.pos.dy.clamp(0.0, _size.height));
+      }
+      setState(() {});
+    });
+    _ticker.start();
+  }
+
+  @override
+  void dispose() {
+    _ticker.dispose();
+    super.dispose();
+  }
+
+  void _ensureParticles(Size s) {
+    if (s == Size.zero) return;
+
+    final area = s.width * s.height;
+    int target = (area / 18000).round();
+    target = target.clamp(35, 95);
+
+    if (_ps.length == target) return;
+
+    _ps = List.generate(target, (i) {
+      final pos = Offset(_rng.nextDouble() * s.width, _rng.nextDouble() * s.height);
+      final speed = 8 + _rng.nextDouble() * 18;
+      final ang = _rng.nextDouble() * pi * 2;
+      final vel = Offset(cos(ang), sin(ang)) * speed;
+      final r = 1.2 + _rng.nextDouble() * 1.9;
+      return _NebulaParticle(pos: pos, vel: vel, radius: r);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(builder: (context, c) {
+      final s = Size(c.maxWidth, c.maxHeight);
+      if (_size != s) {
+        _size = s;
+        _ensureParticles(s);
+      }
+
+      return MouseRegion(
+        onHover: (e) {
+          _hasMouse = true;
+          _mouse = e.localPosition;
+        },
+        onExit: (_) => _hasMouse = false,
+        child: CustomPaint(
+          painter: _NebulaPainter(
+            particles: _ps,
+            time: _t,
+            size: s,
+            mouse: _mouse,
+            hasMouse: _hasMouse,
+          ),
+        ),
+      );
+    });
+  }
+}
+
+class _NebulaParticle {
+  Offset pos;
+  Offset vel;
+  final double radius;
+
+  _NebulaParticle({required this.pos, required this.vel, required this.radius});
+}
+
+class _NebulaPainter extends CustomPainter {
+  final List<_NebulaParticle> particles;
+  final double time;
+  final Size size;
+  final Offset mouse;
+  final bool hasMouse;
+
+  _NebulaPainter({
+    required this.particles,
+    required this.time,
+    required this.size,
+    required this.mouse,
+    required this.hasMouse,
+  });
+
+  @override
+  void paint(Canvas canvas, Size _) {
+    final rect = Offset.zero & size;
+
+    final bg = Paint()
+      ..shader = const LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [Color(0xFF0F1118), Color(0xFF141625), Color(0xFF0B0D14)],
+        stops: [0.0, 0.55, 1.0],
+      ).createShader(rect);
+    canvas.drawRect(rect, bg);
+
+    void glowBlob(Offset c, double r, Color col, double a) {
+      final p = Paint()
+        ..color = col.withOpacity(a)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 90);
+      canvas.drawCircle(c, r, p);
+    }
+
+    final center = Offset(size.width * 0.55, size.height * 0.35);
+    final wobble = Offset(sin(time * 0.5) * 40, cos(time * 0.45) * 30);
+
+    glowBlob(center + wobble, 280, const Color(0xFF8A4FFF), 0.18);
+    glowBlob(
+      Offset(size.width * 0.25, size.height * 0.70) + Offset(cos(time * 0.35) * 35, sin(time * 0.32) * 28),
+      240,
+      const Color(0xFF4895EF),
+      0.14,
+    );
+
+    Offset parallax = Offset.zero;
+    if (hasMouse) {
+      final dx = (mouse.dx / max(1.0, size.width) - 0.5) * 18;
+      final dy = (mouse.dy / max(1.0, size.height) - 0.5) * 18;
+      parallax = Offset(dx, dy);
+    }
+
+    final connectDist = min(size.width, size.height) * 0.15;
+    final connectDist2 = connectDist * connectDist;
+
+    final linePaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1;
+
+    for (int i = 0; i < particles.length; i++) {
+      final a = particles[i];
+      final ap = a.pos + parallax * 0.25;
+
+      for (int j = i + 1; j < particles.length; j++) {
+        final b = particles[j];
+        final bp = b.pos + parallax * 0.25;
+
+        final dx = ap.dx - bp.dx;
+        final dy = ap.dy - bp.dy;
+        final d2 = dx * dx + dy * dy;
+
+        if (d2 < connectDist2) {
+          final t = 1.0 - (sqrt(d2) / connectDist);
+          linePaint.color = Colors.white.withOpacity(0.06 * t);
+          canvas.drawLine(ap, bp, linePaint);
+        }
+      }
+    }
+
+    final dotPaint = Paint()..style = PaintingStyle.fill;
+    for (final p in particles) {
+      final pos = p.pos + parallax * 0.6;
+      dotPaint.color = Colors.white.withOpacity(0.12);
+      canvas.drawCircle(pos, p.radius, dotPaint);
+    }
+
+    final vignette = Paint()
+      ..shader = RadialGradient(
+        center: Alignment.center,
+        radius: 1.15,
+        colors: [Colors.transparent, Colors.black.withOpacity(0.55)],
+        stops: const [0.55, 1.0],
+      ).createShader(rect);
+    canvas.drawRect(rect, vignette);
+  }
+
+  @override
+  bool shouldRepaint(covariant _NebulaPainter oldDelegate) => true;
 }

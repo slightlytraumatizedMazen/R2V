@@ -64,7 +64,26 @@ class R2VApp extends StatelessWidget {
         primaryColor: const Color(0xFFF72585),
         scaffoldBackgroundColor: const Color(0xFFCAF0F8),
         fontFamily: "Poppins",
+
+        // ✅ GLOBAL APPBAR STYLE (back arrow + title)
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+
+          // 👈 this controls the "<" back arrow color
+          iconTheme: IconThemeData(
+            color: Color(0xFFBC70FF), // purple
+          ),
+
+          // optional: title style
+          titleTextStyle: TextStyle(
+            color: Colors.white,
+            fontSize: 18,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
       ),
+
 
       initialRoute: '/home',
 

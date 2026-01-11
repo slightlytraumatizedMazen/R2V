@@ -1,7 +1,11 @@
 // home_screen.dart
-// ✅ Removed: Recent projects section
-// ✅ Fixed: Stats labels (Models / Downloads) stay on ONE line
-// ✅ Fixed: Mobile tabs stay pinned at top for ALL tabs (Home/AI/Scan/Market)
+// ✅ Mobile: replaced top tabs with a "cool out-of-the-box" glass bottom nav (icons only + animated pill)
+// ✅ Mobile: top pill is ONLY "R2V" (glass around it only)
+// ✅ Kept your PREVIOUS stats cards (same style)
+// ✅ Removed "Quick actions" (web + mobile)
+// ✅ Renamed "Use cases" => "Use R2V for"
+// ✅ Bottom bar order: Home, AI Studio, Scan, Market, Profile (Profile tab shows View Profile + Settings)
+// ✅ Bottom bar animation: sliding gradient pill + icon scale
 
 import 'dart:async';
 import 'dart:math';
@@ -87,7 +91,8 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  // Mobile tabs: 0 Home, 1 AI, 2 Scan, 3 Market
+  // Mobile bottom-nav:
+  // 0 Home, 1 AI, 2 Scan, 3 Market, 4 Profile (View profile + Settings)
   int _selectedTab = 0;
 
   // Web nav: 0 Home, 1 AI, 2 Market, 3 Settings
@@ -112,7 +117,6 @@ class _HomeScreenState extends State<HomeScreen> {
   // ------------------------------------------------------------------
   // ✅ DATA: Continue / Stats
   // ------------------------------------------------------------------
-  // (1) Continue section (last items)
   final Map<String, dynamic> _continueAI = const {
     "title": "Neon sci-fi car in rainy alley",
     "subtitle": "Last prompt • 2 hours ago",
@@ -137,7 +141,7 @@ class _HomeScreenState extends State<HomeScreen> {
     "icon": Icons.storefront_rounded,
   };
 
-  // (7) Stats mini cards
+  // ✅ Keep your previous stats mini cards
   final Map<String, int> _stats = const {
     "Models": 12,
     "Scans": 5,
@@ -274,7 +278,7 @@ class _HomeScreenState extends State<HomeScreen> {
       if (_lastIsWeb) {
         if (_webActiveNavIndex != 0) return;
       } else {
-        if (_selectedTab != 0) return;
+        if (_selectedTab != 0) return; // only Home tab
       }
 
       setState(() => _selectedUseCase = (_selectedUseCase + 1) % _useCases.length);
@@ -346,13 +350,13 @@ class _HomeScreenState extends State<HomeScreen> {
                       _buildWebHeroSection(context),
                       const SizedBox(height: 18),
 
-                      // ✅ (7) Stats
+                      // ✅ Stats
                       const _SectionHeader(title: "Your stats", subtitle: "Quick overview"),
                       const SizedBox(height: 12),
                       _StatsRow(stats: _stats),
                       const SizedBox(height: 22),
 
-                      // ✅ (1) Continue
+                      // ✅ Continue
                       const _SectionHeader(title: "Continue", subtitle: "Jump back in"),
                       const SizedBox(height: 12),
                       _ContinueRow(
@@ -361,7 +365,8 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                       const SizedBox(height: 28),
 
-                      const _SectionHeader(title: "Use cases", subtitle: "Pick a category"),
+                      // ✅ Rename Use cases
+                      const _SectionHeader(title: "Use R2V for", subtitle: "Pick a category"),
                       const SizedBox(height: 12),
 
                       MouseRegion(
@@ -390,7 +395,8 @@ class _HomeScreenState extends State<HomeScreen> {
                         switchOutCurve: Curves.easeIn,
                         transitionBuilder: (child, anim) {
                           return SlideTransition(
-                            position: Tween<Offset>(begin: const Offset(-0.06, 0), end: Offset.zero).animate(anim),
+                            position:
+                                Tween<Offset>(begin: const Offset(-0.06, 0), end: Offset.zero).animate(anim),
                             child: FadeTransition(opacity: anim, child: child),
                           );
                         },
@@ -406,54 +412,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
                       const SizedBox(height: 26),
 
-                      // ✅ Quick actions
-                      const _SectionHeader(title: "Quick actions", subtitle: "Start instantly"),
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _HomeActionCard(
-                              title: "AI Studio",
-                              subtitle: "Text → 3D concepts & variations",
-                              icon: Icons.bolt_rounded,
-                              accent: const Color(0xFF8A4FFF),
-                              onTap: () => Navigator.pushNamed(context, '/aichat'),
-                              primaryLabel: "Open",
-                              secondaryLabel: "Templates",
-                              onSecondaryTap: () => _toast(context, "Templates coming soon"),
-                              bullets: const ["Prompt", "Variants", "Export"],
-                            ),
-                          ),
-                          const SizedBox(width: 14),
-                          Expanded(
-                            child: _HomeActionCard(
-                              title: "Scan",
-                              subtitle: "Photo → 3D model (photogrammetry)",
-                              icon: Icons.photo_camera_rounded,
-                              accent: const Color(0xFFF72585),
-                              onTap: () => Navigator.pushNamed(context, '/photo_scan'),
-                              primaryLabel: "Start scan",
-                              secondaryLabel: "Tips",
-                              onSecondaryTap: () => _openTips(context),
-                              bullets: const ["Capture", "Rebuild", "STL/GLB"],
-                            ),
-                          ),
-                          const SizedBox(width: 14),
-                          Expanded(
-                            child: _HomeActionCard(
-                              title: "Marketplace",
-                              subtitle: "Browse assets & packs",
-                              icon: Icons.storefront_rounded,
-                              accent: const Color(0xFF4895EF),
-                              onTap: () => Navigator.pushNamed(context, '/explore'),
-                              primaryLabel: "Browse",
-                              secondaryLabel: "Saved",
-                              onSecondaryTap: () => setState(() => _activeMarketModel = _models.first),
-                              bullets: const ["Preview", "Free/Paid", "Creators"],
-                            ),
-                          ),
-                        ],
-                      ),
+                      // ✅ Removed: Quick actions
                     ],
                   ),
                 ),
@@ -482,11 +441,11 @@ class _HomeScreenState extends State<HomeScreen> {
               const Icon(Icons.auto_awesome_rounded, size: 26, color: Color(0xFFBC70FF)),
               const SizedBox(width: 8),
               const Text(
-                "R2V Studio",
-                style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w700),
+                "R2V",
+                style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w800),
               ),
               const Spacer(),
-              SizedBox(width: 380, child: _buildWebNavTabs(context)),
+              SizedBox(width: 420, child: _buildWebNavTabs(context)),
               const SizedBox(width: 16),
               GestureDetector(
                 onTap: () => Navigator.pushNamed(context, '/profile'),
@@ -617,7 +576,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ElevatedButton.icon(
                       onPressed: () => Navigator.pushNamed(context, '/aichat'),
                       icon: const Icon(Icons.bolt_rounded),
-                      label: const Text("Open AI Studio"),
+                      label: const Text("AI Studio"),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFF8A4FFF),
                         foregroundColor: Colors.white,
@@ -629,7 +588,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ElevatedButton.icon(
                       onPressed: () => Navigator.pushNamed(context, '/photo_scan'),
                       icon: const Icon(Icons.photo_camera_rounded),
-                      label: const Text("Start Scan"),
+                      label: const Text("Scan"),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFFF72585),
                         foregroundColor: Colors.white,
@@ -683,7 +642,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   // =========================
-  // MOBILE (tabs pinned at top)
+  // MOBILE (glass bottom nav)
   // =========================
   Widget _buildMobileHome(BuildContext context) {
     final double w = MediaQuery.of(context).size.width;
@@ -691,48 +650,45 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return Scaffold(
       backgroundColor: Colors.transparent,
+      extendBody: true,
       extendBodyBehindAppBar: true,
       appBar: PreferredSize(
-        preferredSize: Size.fromHeight(_collapsed ? 58 : 74),
-        child: Padding(
-          padding: EdgeInsets.only(
-            top: MediaQuery.of(context).padding.top + 10,
-            left: 14,
-            right: 14,
+        preferredSize: Size.fromHeight(_collapsed ? 56 : 70),
+        child: SafeArea(
+          bottom: false,
+          child: Padding(
+            padding: const EdgeInsets.only(left: 14, right: 14, top: 10),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: _buildMobileTopPill(context),
+            ),
           ),
-          child: _buildMobileTopPill(context),
         ),
       ),
+      bottomNavigationBar: _GlassBottomNavBar(
+        currentIndex: _selectedTab,
+        onTap: (i) => setState(() => _selectedTab = i),
+      ),
       body: Padding(
-        padding: EdgeInsets.fromLTRB(16, (_collapsed ? 92 : 110), 16, 16),
+        // ✅ leave space so content never hides behind bottom bar
+        padding: EdgeInsets.fromLTRB(16, (_collapsed ? 86 : 104), 16, 96),
         child: Center(
           child: ConstrainedBox(
             constraints: BoxConstraints(maxWidth: contentWidth),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // ✅ Tabs always visible (pinned)
-                _buildMobileTabs(),
-                const SizedBox(height: 14),
-
-                // ✅ Only the content scrolls
-                Expanded(
-                  child: SingleChildScrollView(
-                    controller: _scrollController,
-                    physics: const BouncingScrollPhysics(),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        if (_selectedTab == 0) _buildHomeTabMobile(context),
-                        if (_selectedTab == 1) _buildAiTabMobile(context),
-                        if (_selectedTab == 2) _buildScanTabMobile(context),
-                        if (_selectedTab == 3) _buildMarketTabMobile(context),
-                        const SizedBox(height: 24),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
+            child: SingleChildScrollView(
+              controller: _scrollController,
+              physics: const BouncingScrollPhysics(),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (_selectedTab == 0) _buildHomeTabMobile(context),
+                  if (_selectedTab == 1) _buildAiTabMobile(context),
+                  if (_selectedTab == 2) _buildScanTabMobile(context),
+                  if (_selectedTab == 3) _buildMarketTabMobile(context),
+                  if (_selectedTab == 4) _buildProfileTabMobile(context),
+                  const SizedBox(height: 24),
+                ],
+              ),
             ),
           ),
         ),
@@ -740,91 +696,40 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  /// ✅ Top bar ONLY "R2V" with glass around it (no other icons)
   Widget _buildMobileTopPill(BuildContext context) {
-    return ClipRRect(
+  return AnimatedContainer(
+    duration: const Duration(milliseconds: 180),
+    curve: Curves.easeOut,
+    padding: EdgeInsets.symmetric(horizontal: 14, vertical: _collapsed ? 9 : 10),
+    decoration: BoxDecoration(
+      color: const Color(0xFF0B0D14).withOpacity(0.85), // dark pill like screenshot
       borderRadius: BorderRadius.circular(999),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
-        child: Container(
-          padding: EdgeInsets.symmetric(horizontal: 14, vertical: _collapsed ? 10 : 12),
-          decoration: BoxDecoration(
-            color: Colors.black.withOpacity(0.35),
-            borderRadius: BorderRadius.circular(999),
-            border: Border.all(color: Colors.white.withOpacity(0.12)),
-          ),
-          child: Row(
-            children: [
-              Icon(Icons.auto_awesome_rounded, color: const Color(0xFFBC70FF), size: _collapsed ? 20 : 24),
-              const SizedBox(width: 8),
-              Text(
-                "R2V Studio",
-                style: TextStyle(color: Colors.white, fontSize: _collapsed ? 16 : 18, fontWeight: FontWeight.w700),
-              ),
-              const Spacer(),
-              GestureDetector(
-                onTap: () => Navigator.pushNamed(context, '/profile'),
-                child: Container(
-                  width: _collapsed ? 34 : 38,
-                  height: _collapsed ? 34 : 38,
-                  decoration: BoxDecoration(color: Colors.white.withOpacity(0.18), shape: BoxShape.circle),
-                  child: const Icon(Icons.person, color: Colors.white, size: 20),
-                ),
-              ),
-            ],
+      border: Border.all(color: Colors.white.withOpacity(0.10)),
+    ),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // ✨ icon (use this OR Image.asset)
+        const Icon(Icons.auto_awesome_rounded, color: Color(0xFFBC70FF), size: 18),
+
+        // If you have a sparkle asset instead:
+        // Image.asset("assets/icons/sparkles.png", width: 18, height: 18),
+
+        const SizedBox(width: 8),
+        Text(
+          "R2V",
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: _collapsed ? 15 : 16,
+            fontWeight: FontWeight.w900,
+            letterSpacing: -0.2,
           ),
         ),
-      ),
-    );
-  }
-
-  Widget _buildMobileTabs() {
-    final labels = ["Home", "AI", "Scan", "Market"];
-
-    return Container(
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.08),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: Colors.white.withOpacity(0.12)),
-      ),
-      child: Row(
-        children: List.generate(labels.length, (index) {
-          final bool selected = _selectedTab == index;
-          return Expanded(
-            child: GestureDetector(
-              onTap: () => setState(() => _selectedTab = index),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 160),
-                padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(999),
-                  gradient: selected
-                      ? const LinearGradient(
-                          colors: [Color(0xFFF72585), Color(0xFFBC70FF)],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        )
-                      : null,
-                ),
-                child: Center(
-                  child: Text(
-                    labels[index],
-                    overflow: TextOverflow.fade,
-                    softWrap: false,
-                    style: TextStyle(
-                      color: selected ? Colors.white : Colors.white.withOpacity(0.85),
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          );
-        }),
-      ),
-    );
-  }
+      ],
+    ),
+  );
+}
 
   // -------------------------
   // Mobile: Home tab content
@@ -836,13 +741,13 @@ class _HomeScreenState extends State<HomeScreen> {
         _buildMobileHeroStack(context),
         const SizedBox(height: 16),
 
-        // ✅ (7) Stats
+        // ✅ Stats (kept your previous style)
         const _SectionHeader(title: "Your stats", subtitle: "Quick overview"),
         const SizedBox(height: 12),
         _StatsRow(stats: _stats),
         const SizedBox(height: 18),
 
-        // ✅ (1) Continue
+        // ✅ Continue
         const _SectionHeader(title: "Continue", subtitle: "Jump back in"),
         const SizedBox(height: 12),
         _ContinueRow(
@@ -852,7 +757,8 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         const SizedBox(height: 22),
 
-        const _SectionHeader(title: "Use Cases", subtitle: "Pick a category"),
+        // ✅ Rename Use cases
+        const _SectionHeader(title: "Use R2V for", subtitle: "Pick a category"),
         const SizedBox(height: 12),
         NotificationListener<ScrollNotification>(
           onNotification: (n) {
@@ -882,47 +788,8 @@ class _HomeScreenState extends State<HomeScreen> {
             onCta: () => Navigator.pushNamed(context, _useCaseDetails[_selectedUseCase]["ctaRoute"]),
           ),
         ),
-        const SizedBox(height: 22),
 
-        // ✅ Quick actions
-        const _SectionHeader(title: "Quick actions", subtitle: "Start instantly"),
-        const SizedBox(height: 12),
-
-        _HomeActionCard(
-          title: "AI Studio",
-          subtitle: "Text → 3D concepts & variations",
-          icon: Icons.bolt_rounded,
-          accent: const Color(0xFF8A4FFF),
-          onTap: () => Navigator.pushNamed(context, '/aichat'),
-          primaryLabel: "Open",
-          secondaryLabel: "Templates",
-          onSecondaryTap: () => _toast(context, "Templates coming soon"),
-          bullets: const ["Prompt", "Variants", "Export"],
-        ),
-        const SizedBox(height: 12),
-        _HomeActionCard(
-          title: "Scan",
-          subtitle: "Photo → 3D model (photogrammetry)",
-          icon: Icons.photo_camera_rounded,
-          accent: const Color(0xFFF72585),
-          onTap: () => Navigator.pushNamed(context, '/photo_scan'),
-          primaryLabel: "Start scan",
-          secondaryLabel: "Tips",
-          onSecondaryTap: () => _openTips(context),
-          bullets: const ["Capture", "Rebuild", "STL/GLB"],
-        ),
-        const SizedBox(height: 12),
-        _HomeActionCard(
-          title: "Marketplace",
-          subtitle: "Browse assets & packs",
-          icon: Icons.storefront_rounded,
-          accent: const Color(0xFF4895EF),
-          onTap: () => Navigator.pushNamed(context, '/explore'),
-          primaryLabel: "Browse",
-          secondaryLabel: "Saved",
-          onSecondaryTap: () => setState(() => _activeMarketModel = _models.first),
-          bullets: const ["Preview", "Free/Paid", "Creators"],
-        ),
+        // ✅ Removed: Quick actions
       ],
     );
   }
@@ -1086,6 +953,52 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   // -------------------------
+  // Mobile: Profile tab (ViewProfile + Settings)
+  // -------------------------
+  Widget _buildProfileTabMobile(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const _SectionHeader(title: "Profile", subtitle: "Account shortcuts"),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: _GlassSmallAction(
+                icon: Icons.person_rounded,
+                title: "View Profile",
+                subtitle: "Your info & activity",
+                onTap: () => Navigator.pushNamed(context, '/profile'),
+                accent: const Color(0xFFBC70FF),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _GlassSmallAction(
+                icon: Icons.settings_rounded,
+                title: "Settings",
+                subtitle: "Preferences",
+                onTap: () => Navigator.pushNamed(context, '/settings'),
+                accent: const Color(0xFF4895EF),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 14),
+        const _SectionHeader(title: "Tip", subtitle: "Quick scan tips"),
+        const SizedBox(height: 10),
+        _GlassSmallAction(
+          icon: Icons.lightbulb_rounded,
+          title: "Open Scan Tips",
+          subtitle: "Lighting, angles, consistency",
+          onTap: () => _openTips(context),
+          accent: const Color(0xFFF72585),
+        ),
+      ],
+    );
+  }
+
+  // -------------------------
   // Helpers
   // -------------------------
   void _toast(BuildContext context, String msg) {
@@ -1105,6 +1018,132 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
+}
+
+// =========================
+// ✅ Glass Bottom Nav Bar (icons only + animated pill)
+// =========================
+class _GlassBottomNavBar extends StatelessWidget {
+  final int currentIndex;
+  final ValueChanged<int> onTap;
+
+  const _GlassBottomNavBar({
+    required this.currentIndex,
+    required this.onTap,
+  });
+
+  static const _items = <_BottomItem>[
+    _BottomItem(icon: Icons.home_rounded, semantics: "Home"),
+    _BottomItem(icon: Icons.bolt_rounded, semantics: "AI Studio"),
+    _BottomItem(icon: Icons.photo_camera_rounded, semantics: "Scan"),
+    _BottomItem(icon: Icons.storefront_rounded, semantics: "Market"),
+    _BottomItem(icon: Icons.person_rounded, semantics: "Profile"),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(999),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+            child: Container(
+              height: 72,
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.30),
+                borderRadius: BorderRadius.circular(999),
+                border: Border.all(color: Colors.white.withOpacity(0.12)),
+                boxShadow: [
+                  BoxShadow(
+                    blurRadius: 30,
+                    color: Colors.black.withOpacity(0.45),
+                    offset: const Offset(0, 14),
+                  ),
+                ],
+              ),
+              child: LayoutBuilder(
+                builder: (context, c) {
+                  final segW = c.maxWidth / _items.length;
+                  const pill = 44.0;
+                  final left = (currentIndex * segW) + (segW - pill) / 2;
+
+                  return Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      // moving pill
+                      AnimatedPositioned(
+                        duration: const Duration(milliseconds: 260),
+                        curve: Curves.easeOutCubic,
+                        left: left,
+                        top: (72 - pill) / 2,
+                        child: Container(
+                          width: pill,
+                          height: pill,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            gradient: const LinearGradient(
+                              colors: [Color(0xFFF72585), Color(0xFFBC70FF)],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                blurRadius: 18,
+                                color: const Color(0xFFBC70FF).withOpacity(0.25),
+                                offset: const Offset(0, 10),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+
+                      Row(
+                        children: List.generate(_items.length, (i) {
+                          final active = i == currentIndex;
+                          return Expanded(
+                            child: Semantics(
+                              label: _items[i].semantics,
+                              button: true,
+                              child: InkWell(
+                                onTap: () => onTap(i),
+                                splashColor: Colors.white.withOpacity(0.06),
+                                highlightColor: Colors.white.withOpacity(0.04),
+                                child: Center(
+                                  child: AnimatedScale(
+                                    duration: const Duration(milliseconds: 180),
+                                    curve: Curves.easeOut,
+                                    scale: active ? 1.05 : 1.0,
+                                    child: Icon(
+                                      _items[i].icon,
+                                      size: 22,
+                                      color: active ? Colors.white : Colors.white.withOpacity(0.70),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          );
+                        }),
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _BottomItem {
+  final IconData icon;
+  final String semantics;
+  const _BottomItem({required this.icon, required this.semantics});
 }
 
 // =========================
@@ -1344,7 +1383,7 @@ class _SectionHeader extends StatelessWidget {
 }
 
 // =========================
-// ✅ (7) Stats row
+// ✅ (7) Stats row (kept)
 // =========================
 class _StatsRow extends StatelessWidget {
   final Map<String, int> stats;
@@ -1446,7 +1485,11 @@ class _MiniStatCard extends StatelessWidget {
                         maxLines: 1,
                         softWrap: false,
                         overflow: TextOverflow.ellipsis,
-                        style: TextStyle(color: Colors.white.withOpacity(0.70), fontSize: 12, fontWeight: FontWeight.w700),
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.70),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                     ),
                     const SizedBox(height: 2),
@@ -2232,6 +2275,75 @@ class _HomeActionCardState extends State<_HomeActionCard> {
                 ],
               ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _GlassSmallAction extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+  final Color accent;
+
+  const _GlassSmallAction({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+    required this.accent,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(18),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+        child: InkWell(
+          onTap: onTap,
+          child: Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: Colors.black.withOpacity(0.18),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: Colors.white.withOpacity(0.12)),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 38,
+                  height: 38,
+                  decoration: BoxDecoration(
+                    color: accent.withOpacity(0.18),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: accent.withOpacity(0.55)),
+                  ),
+                  child: Icon(icon, color: Colors.white, size: 20),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900)),
+                      const SizedBox(height: 3),
+                      Text(subtitle,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(color: Colors.white.withOpacity(0.70), fontSize: 12)),
+                    ],
+                  ),
+                ),
+                const Icon(Icons.arrow_forward_rounded, color: Colors.white70, size: 18),
+              ],
+            ),
           ),
         ),
       ),

@@ -1,101 +1,129 @@
+import 'dart:math';
 import 'dart:ui';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 class SignIn extends StatefulWidget {
+  const SignIn({super.key});
+
   @override
   State<SignIn> createState() => _SignInState();
 }
 
 class _SignInState extends State<SignIn> {
+  static const Color _accentPink = Color(0xFFF72585);
+  static const Color _accentLavender = Color(0xFFBC70FF);
+  static const Color _accentCyan = Color(0xFF4CC9F0);
+
   bool _obscurePassword = true;
   bool _rememberMe = false;
 
+  final TextEditingController username = TextEditingController();
+  final TextEditingController password = TextEditingController();
+
+  @override
+  void dispose() {
+    username.dispose();
+    password.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
+    final w = MediaQuery.of(context).size.width;
+    final h = MediaQuery.of(context).size.height;
+    final contentWidth = w > 540 ? 540.0 : w;
+
     return Scaffold(
-      resizeToAvoidBottomInset: false,  // FIX A
-      backgroundColor: const Color(0xFF21222A),
+      resizeToAvoidBottomInset: true,
+      backgroundColor: Colors.transparent,
+      body: Stack(
+        children: [
+          const Positioned.fill(child: NebulaMeshBackground()),
 
-      body: LayoutBuilder(
-        builder: (context, constraints) {
-          final double maxWidth = constraints.maxWidth;
-          final double maxHeight = constraints.maxHeight;
+          // ✅ Top-left pill (same theme)
+          Positioned(
+            left: 26,
+            top: h * 0.03,
+            child: _leftPill(),
+          ),
 
-          final bool isWeb = maxWidth > 600;
-          final double contentWidth = maxWidth > 430 ? 430 : maxWidth;
-          final double shapeScale = isWeb ? 0.55 : 0.80;
+          Center(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: contentWidth),
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(16, 28, 16, 28),
+                physics: const BouncingScrollPhysics(),
+                child: _glassCard(child: _content()),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
-          return Stack(
-            alignment: Alignment.topCenter,
+  Widget _leftPill() {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(999),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            color: Colors.black.withOpacity(0.35),
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(color: Colors.white.withOpacity(0.12)),
+          ),
+          child: const Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Positioned(
-                top: -30 * shapeScale,
-                left: -50 * shapeScale,
-                child: Transform.scale(
-                  scale: shapeScale,
-                  child: Image.asset(
-                    "assets/shapes/helix.png",
-                    width: contentWidth * 0.85,
-                  ),
-                ),
-              ),
-              Positioned(
-                top: 80 * shapeScale,
-                right: -105 * shapeScale,
-                child: Transform.scale(
-                  scale: shapeScale,
-                  child: Image.asset(
-                    "assets/shapes/pyramid_1.png",
-                    width: contentWidth * 0.90,
-                  ),
-                ),
-              ),
-
-              Center(
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(
-                    maxWidth: contentWidth,
-                    maxHeight: maxHeight - 30,
-                  ),
-                  child: _glassCard(contentWidth, isWeb),
+              Icon(Icons.auto_awesome_rounded, color: Color(0xFFBC70FF), size: 18),
+              SizedBox(width: 8),
+              Text(
+                "R2V",
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: -0.2,
                 ),
               ),
             ],
-          );
-        },
-      ),
-    );
-  }
-
-  Widget _glassCard(double width, bool isWeb) {
-    final card = Container(
-      width: width,
-      padding: const EdgeInsets.fromLTRB(26, 34, 26, 34),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(38),
-        gradient: LinearGradient(
-          colors: [
-            const Color(0xFF21222A).withOpacity(0.33),
-            const Color(0xFF202128).withOpacity(0.33),
-            const Color(0xFF21222A).withOpacity(0.35),
-          ],
+          ),
         ),
-        border: Border.all(color: Colors.white.withOpacity(0.25), width: 1.4),
-      ),
-      child: _content(width),
-    );
-
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(38),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 25, sigmaY: 25),
-        child: isWeb ? card : SingleChildScrollView(child: card),
       ),
     );
   }
 
-  Widget _content(double width) {
+  Widget _glassCard({required Widget child}) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(26),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(22, 22, 22, 22),
+          decoration: BoxDecoration(
+            color: Colors.black.withOpacity(0.22),
+            borderRadius: BorderRadius.circular(26),
+            border: Border.all(color: Colors.white.withOpacity(0.12)),
+            boxShadow: [
+              BoxShadow(
+                blurRadius: 40,
+                color: Colors.black.withOpacity(0.45),
+                offset: const Offset(0, 20),
+              ),
+            ],
+          ),
+          child: child,
+        ),
+      ),
+    );
+  }
+
+  Widget _content() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -107,19 +135,25 @@ class _SignInState extends State<SignIn> {
             fontWeight: FontWeight.w800,
           ),
         ),
-        const SizedBox(height: 4),
+        const SizedBox(height: 6),
         Text(
           "welcome back we missed you",
-          style: TextStyle(color: Colors.white.withOpacity(0.85), fontSize: 15),
+          style: TextStyle(color: Colors.white.withOpacity(0.72), fontSize: 14),
         ),
-        const SizedBox(height: 32),
+        const SizedBox(height: 20),
 
         _label("User Name"),
-        _input(icon: Icons.person_outline, hint: "John12"),
-        const SizedBox(height: 22),
+        _field(
+          controller: username,
+          icon: Icons.person_outline,
+          hint: "John12",
+          keyboardType: TextInputType.text,
+        ),
+        const SizedBox(height: 12),
 
         _label("Password"),
-        _input(
+        _field(
+          controller: password,
           icon: Icons.lock_outline,
           hint: "enter your password",
           obscure: _obscurePassword,
@@ -127,27 +161,34 @@ class _SignInState extends State<SignIn> {
             icon: Icon(
               _obscurePassword ? Icons.visibility_off : Icons.visibility,
               color: Colors.white60,
+              size: 20,
             ),
-            onPressed: () =>
-                setState(() => _obscurePassword = !_obscurePassword),
+            onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
           ),
         ),
-        const SizedBox(height: 10),
+
+        const SizedBox(height: 8),
 
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Row(
               children: [
-                Checkbox(
-                  value: _rememberMe,
-                  activeColor: const Color(0xFFB197FC),
-                  checkColor: Colors.white,
-                  onChanged: (v) => setState(() => _rememberMe = v ?? false),
+                SizedBox(
+                  width: 22,
+                  height: 22,
+                  child: Checkbox(
+                    value: _rememberMe,
+                    activeColor: _accentLavender,
+                    checkColor: Colors.white,
+                    side: BorderSide(color: Colors.white.withOpacity(0.35)),
+                    onChanged: (v) => setState(() => _rememberMe = v ?? false),
+                  ),
                 ),
+                const SizedBox(width: 10),
                 Text(
                   "Remember Me",
-                  style: TextStyle(color: Colors.white.withOpacity(0.65)),
+                  style: TextStyle(color: Colors.white.withOpacity(0.70), fontSize: 13.5),
                 ),
               ],
             ),
@@ -155,13 +196,13 @@ class _SignInState extends State<SignIn> {
               onPressed: () => Navigator.pushNamed(context, '/forgot'),
               child: Text(
                 "Forgot Password?",
-                style: TextStyle(color: Colors.white.withOpacity(0.85)),
+                style: TextStyle(color: Colors.white.withOpacity(0.80), fontWeight: FontWeight.w700),
               ),
             ),
           ],
         ),
 
-        const SizedBox(height: 18),
+        const SizedBox(height: 14),
 
         GestureDetector(
           onTap: () => Navigator.pushNamed(context, '/home'),
@@ -169,71 +210,74 @@ class _SignInState extends State<SignIn> {
             width: double.infinity,
             padding: const EdgeInsets.symmetric(vertical: 16),
             decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(18),
               gradient: const LinearGradient(
-                colors: [Color(0xFF8A4FFF), Color(0xFFBC70FF)],
+                colors: [_accentPink, _accentLavender],
+                begin: Alignment.centerLeft,
+                end: Alignment.centerRight,
               ),
-              borderRadius: BorderRadius.circular(24),
+              boxShadow: [
+                BoxShadow(
+                  blurRadius: 22,
+                  color: _accentLavender.withOpacity(0.18),
+                  offset: const Offset(0, 14),
+                ),
+              ],
             ),
             child: const Center(
               child: Text(
                 "Sign In",
                 style: TextStyle(
-                  fontSize: 18,
+                  fontSize: 16.5,
                   color: Colors.white,
-                  fontWeight: FontWeight.w600,
+                  fontWeight: FontWeight.w900,
                 ),
               ),
             ),
           ),
         ),
 
-        const SizedBox(height: 18),
+        const SizedBox(height: 16),
 
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Text(
               "Don’t have an Account ? ",
-              style: TextStyle(color: Colors.white.withOpacity(0.8)),
+              style: TextStyle(color: Colors.white.withOpacity(0.80)),
             ),
             GestureDetector(
               onTap: () => Navigator.pushNamed(context, '/signup'),
               child: const Text(
                 "Sign up",
                 style: TextStyle(
-                  color: Color(0xFF4CC9F0),
-                  fontWeight: FontWeight.w600,
+                  color: _accentCyan,
+                  fontWeight: FontWeight.w900,
                 ),
               ),
             ),
           ],
         ),
 
-        const SizedBox(height: 20),
+        const SizedBox(height: 18),
 
         Center(
           child: Text(
             "Or continue with",
-            style: TextStyle(color: Colors.white.withOpacity(0.8)),
+            style: TextStyle(color: Colors.white.withOpacity(0.70)),
           ),
         ),
 
-        const SizedBox(height: 14),
+        const SizedBox(height: 12),
 
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            _social(FontAwesomeIcons.google, () {
-              Navigator.pushNamed(context, '/completeprofile');
-            }),
-            const SizedBox(width: 16),
-            _social(FontAwesomeIcons.apple, () {
-              Navigator.pushNamed(context, '/completeprofile');
-            }),
-            const SizedBox(width: 16),
-            _social(FontAwesomeIcons.microsoft, () {
-              Navigator.pushNamed(context, '/completeprofile');
-            }),
+            _social(FontAwesomeIcons.google, () => Navigator.pushNamed(context, '/completeprofile')),
+            const SizedBox(width: 14),
+            _social(FontAwesomeIcons.apple, () => Navigator.pushNamed(context, '/completeprofile')),
+            const SizedBox(width: 14),
+            _social(FontAwesomeIcons.microsoft, () => Navigator.pushNamed(context, '/completeprofile')),
           ],
         ),
       ],
@@ -241,34 +285,56 @@ class _SignInState extends State<SignIn> {
   }
 
   Widget _label(String txt) {
-    return Text(
-      txt,
-      style: const TextStyle(
-        color: Colors.white,
-        fontWeight: FontWeight.w500,
-        fontSize: 14.5,
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Text(
+        txt,
+        style: TextStyle(
+          color: Colors.white.withOpacity(0.86),
+          fontSize: 13,
+          fontWeight: FontWeight.w700,
+        ),
       ),
     );
   }
 
-  Widget _input({
+  Widget _field({
+    required TextEditingController controller,
     required IconData icon,
     required String hint,
     bool obscure = false,
     Widget? suffix,
+    TextInputType? keyboardType,
   }) {
-    return TextField(
-      obscureText: obscure,
-      style: const TextStyle(color: Colors.white),
-      decoration: InputDecoration(
-        prefixIcon: Icon(icon, color: Colors.white70),
-        suffixIcon: suffix,
-        hintText: " | $hint",
-        hintStyle: TextStyle(color: Colors.white.withOpacity(0.45)),
-        enabledBorder:
-            const UnderlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
-        focusedBorder:
-            const UnderlineInputBorder(borderSide: BorderSide(color: Colors.white70)),
+    return Container(
+      height: 54,
+      padding: const EdgeInsets.symmetric(horizontal: 14),
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.20),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: Colors.white.withOpacity(0.12)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: Colors.white.withOpacity(0.75), size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: TextField(
+              controller: controller,
+              obscureText: obscure,
+              keyboardType: keyboardType,
+              style: const TextStyle(color: Colors.white, fontSize: 14),
+              cursorColor: Colors.white,
+              decoration: InputDecoration(
+                hintText: hint,
+                hintStyle: TextStyle(color: Colors.white.withOpacity(0.40)),
+                border: InputBorder.none,
+              ),
+              onTapOutside: (_) => FocusScope.of(context).unfocus(),
+            ),
+          ),
+          if (suffix != null) suffix,
+        ],
       ),
     );
   }
@@ -276,15 +342,241 @@ class _SignInState extends State<SignIn> {
   Widget _social(IconData icon, VoidCallback onTap) {
     return GestureDetector(
       onTap: onTap,
-      child: Container(
-        width: 54,
-        height: 54,
-        decoration: BoxDecoration(
-          color: const Color(0xFF262730),
-          borderRadius: BorderRadius.circular(16),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+          child: Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: Colors.black.withOpacity(0.18),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.white.withOpacity(0.12)),
+              boxShadow: [
+                BoxShadow(
+                  blurRadius: 18,
+                  color: Colors.black.withOpacity(0.30),
+                  offset: const Offset(0, 12),
+                ),
+              ],
+            ),
+            child: Icon(icon, color: Colors.white, size: 20),
+          ),
         ),
-        child: Icon(icon, color: Colors.white, size: 22),
       ),
     );
   }
+}
+
+// =====================================================================
+// ✅ Same Nebula background (mouse hover parallax)
+// =====================================================================
+
+class NebulaMeshBackground extends StatefulWidget {
+  const NebulaMeshBackground({super.key});
+
+  @override
+  State<NebulaMeshBackground> createState() => _NebulaMeshBackgroundState();
+}
+
+class _NebulaMeshBackgroundState extends State<NebulaMeshBackground> with SingleTickerProviderStateMixin {
+  late final Ticker _ticker;
+  final Random _rng = Random(42);
+
+  Size _size = Size.zero;
+  Offset _mouse = Offset.zero;
+  bool _hasMouse = false;
+
+  late List<_NebulaParticle> _ps;
+  double _t = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _ps = <_NebulaParticle>[];
+    _ticker = createTicker((elapsed) {
+      _t = elapsed.inMilliseconds / 1000.0;
+      if (!mounted) return;
+      if (_size == Size.zero) return;
+
+      const dt = 1 / 60;
+      for (final p in _ps) {
+        p.pos = p.pos + p.vel * dt;
+        if (p.pos.dx < 0 || p.pos.dx > _size.width) p.vel = Offset(-p.vel.dx, p.vel.dy);
+        if (p.pos.dy < 0 || p.pos.dy > _size.height) p.vel = Offset(p.vel.dx, -p.vel.dy);
+        p.pos = Offset(p.pos.dx.clamp(0.0, _size.width), p.pos.dy.clamp(0.0, _size.height));
+      }
+      setState(() {});
+    });
+    _ticker.start();
+  }
+
+  @override
+  void dispose() {
+    _ticker.dispose();
+    super.dispose();
+  }
+
+  void _ensureParticles(Size s) {
+    if (s == Size.zero) return;
+
+    final area = s.width * s.height;
+    int target = (area / 18000).round();
+    target = target.clamp(35, 95);
+
+    if (_ps.length == target) return;
+
+    _ps = List.generate(target, (_) {
+      final pos = Offset(_rng.nextDouble() * s.width, _rng.nextDouble() * s.height);
+      final speed = 8 + _rng.nextDouble() * 18;
+      final ang = _rng.nextDouble() * pi * 2;
+      final vel = Offset(cos(ang), sin(ang)) * speed;
+      final r = 1.2 + _rng.nextDouble() * 1.9;
+      return _NebulaParticle(pos: pos, vel: vel, radius: r);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(builder: (context, c) {
+      final s = Size(c.maxWidth, c.maxHeight);
+      if (_size != s) {
+        _size = s;
+        _ensureParticles(s);
+      }
+
+      return MouseRegion(
+        onHover: (e) {
+          _hasMouse = true;
+          _mouse = e.localPosition;
+        },
+        onExit: (_) => _hasMouse = false,
+        child: CustomPaint(
+          painter: _NebulaPainter(
+            particles: _ps,
+            time: _t,
+            size: s,
+            mouse: _mouse,
+            hasMouse: _hasMouse,
+          ),
+        ),
+      );
+    });
+  }
+}
+
+class _NebulaParticle {
+  Offset pos;
+  Offset vel;
+  final double radius;
+
+  _NebulaParticle({required this.pos, required this.vel, required this.radius});
+}
+
+class _NebulaPainter extends CustomPainter {
+  final List<_NebulaParticle> particles;
+  final double time;
+  final Size size;
+
+  final Offset mouse;
+  final bool hasMouse;
+
+  _NebulaPainter({
+    required this.particles,
+    required this.time,
+    required this.size,
+    required this.mouse,
+    required this.hasMouse,
+  });
+
+  @override
+  void paint(Canvas canvas, Size _) {
+    final rect = Offset.zero & size;
+
+    Offset parallax = Offset.zero;
+    if (hasMouse) {
+      final dx = (mouse.dx / max(1.0, size.width) - 0.5) * 18;
+      final dy = (mouse.dy / max(1.0, size.height) - 0.5) * 18;
+      parallax = Offset(dx, dy);
+    }
+
+    final bg = Paint()
+      ..shader = const LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [Color(0xFF0F1118), Color(0xFF141625), Color(0xFF0B0D14)],
+        stops: [0.0, 0.55, 1.0],
+      ).createShader(rect);
+    canvas.drawRect(rect, bg);
+
+    void glowBlob(Offset c, double r, Color col, double a) {
+      final p = Paint()
+        ..color = col.withOpacity(a)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 110);
+      canvas.drawCircle(c, r, p);
+    }
+
+    final wobble = Offset(sin(time * 0.5) * 40, cos(time * 0.45) * 30);
+
+    glowBlob(
+      Offset(size.width * 0.60, size.height * 0.20) + wobble + parallax * 0.35,
+      360,
+      const Color(0xFF8A4FFF),
+      0.20,
+    );
+
+    glowBlob(
+      Offset(size.width * 0.20, size.height * 0.72) +
+          Offset(cos(time * 0.35) * 35, sin(time * 0.32) * 28) +
+          parallax * 0.25,
+      240,
+      const Color(0xFF4895EF),
+      0.12,
+    );
+
+    final connectDist = min(size.width, size.height) * 0.16;
+    final connectDist2 = connectDist * connectDist;
+
+    final linePaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1;
+
+    for (int i = 0; i < particles.length; i++) {
+      final a = particles[i].pos + parallax * 0.25;
+
+      for (int j = i + 1; j < particles.length; j++) {
+        final b = particles[j].pos + parallax * 0.25;
+
+        final dx = a.dx - b.dx;
+        final dy = a.dy - b.dy;
+        final d2 = dx * dx + dy * dy;
+
+        if (d2 < connectDist2) {
+          final t = 1.0 - (sqrt(d2) / connectDist);
+          linePaint.color = Colors.white.withOpacity(0.055 * t);
+          canvas.drawLine(a, b, linePaint);
+        }
+      }
+    }
+
+    final dotPaint = Paint()..style = PaintingStyle.fill;
+    for (final p in particles) {
+      dotPaint.color = Colors.white.withOpacity(0.12);
+      final pos = p.pos + parallax * 0.55;
+      canvas.drawCircle(pos, p.radius, dotPaint);
+    }
+
+    final vignette = Paint()
+      ..shader = RadialGradient(
+        center: Alignment.center,
+        radius: 1.15,
+        colors: [Colors.transparent, Colors.black.withOpacity(0.60)],
+        stops: const [0.55, 1.0],
+      ).createShader(rect);
+    canvas.drawRect(rect, vignette);
+  }
+
+  @override
+  bool shouldRepaint(covariant _NebulaPainter oldDelegate) => true;
 }

@@ -85,7 +85,7 @@ class R2VApp extends StatelessWidget {
       ),
 
 
-      initialRoute: '/home',
+      initialRoute: '/welcome',
 
       // -------------------------------------------------------------
       // STATIC ROUTES (all routed through onGenerateRoute)
